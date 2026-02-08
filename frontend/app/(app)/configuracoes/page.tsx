@@ -155,6 +155,9 @@ export default function ConfiguracoesPage() {
   const [planoAulas, setPlanoAulas] = useState("");
   const [planoCategoria, setPlanoCategoria] = useState("");
   const [planoSubcategoria, setPlanoSubcategoria] = useState("");
+  const [contaBanco, setContaBanco] = useState("");
+  const [contaAgencia, setContaAgencia] = useState("");
+  const [contaCc, setContaCc] = useState("");
   const [categoriaTipo, setCategoriaTipo] = useState<"Receita" | "Despesa">("Receita");
   const [subcategoriaCategoria, setSubcategoriaCategoria] = useState("");
   const [contratoTexto, setContratoTexto] = useState(`CONTRATO DE PRESTACAO DE SERVICOS - BEACH TENNIS
@@ -274,6 +277,9 @@ CONTRATADA: ______________________`);
     setPlanoAulas("");
     setPlanoCategoria("");
     setPlanoSubcategoria("");
+    setContaBanco("");
+    setContaAgencia("");
+    setContaCc("");
     setCategoriaTipo("Receita");
     setSubcategoriaCategoria(categoriasAtivas[0] || "");
     if (entidade === "modelo_contrato") {
@@ -301,7 +307,9 @@ CONTRATADA: ______________________`);
       const conta = contasBancariasApi.find((c) => c.id === item.id);
       if (conta) {
         setTitulo(conta.nome_conta);
-        setDetalhe(`${conta.banco} | ${conta.agencia} | ${conta.cc}`);
+        setContaBanco(conta.banco || "");
+        setContaAgencia(conta.agencia || "");
+        setContaCc(conta.cc || "");
       }
     }
     if (entidade === "categoria") {
@@ -341,9 +349,9 @@ CONTRATADA: ______________________`);
     if (entidade === "conta_bancaria") {
       const payload = {
         nome_conta: titulo,
-        banco: detalhe.split("|")[0]?.trim() || "",
-        agencia: detalhe.split("|")[1]?.trim() || "",
-        cc: detalhe.split("|")[2]?.trim() || "",
+        banco: contaBanco.trim(),
+        agencia: contaAgencia.trim(),
+        cc: contaCc.trim(),
       };
       const url = editId ? `${API_URL}/contas-bancarias/${editId}` : `${API_URL}/contas-bancarias`;
       const method = editId ? "PUT" : "POST";
@@ -488,8 +496,16 @@ CONTRATADA: ______________________`);
                 ) : entidade === "conta_bancaria" ? (
                   <>
                     <div className="space-y-1">
-                      <p className="text-xs font-medium uppercase tracking-wide text-muted">Banco | Agencia | CC</p>
-                      <Input value={detalhe} onChange={(e) => setDetalhe(e.target.value)} placeholder="Banco | Agencia | CC" />
+                      <p className="text-xs font-medium uppercase tracking-wide text-muted">Banco</p>
+                      <Input value={contaBanco} onChange={(e) => setContaBanco(e.target.value)} placeholder="Ex: Banco do Brasil" />
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-xs font-medium uppercase tracking-wide text-muted">Agencia</p>
+                      <Input value={contaAgencia} onChange={(e) => setContaAgencia(e.target.value)} placeholder="Ex: 1234-5" />
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-xs font-medium uppercase tracking-wide text-muted">Conta Corrente</p>
+                      <Input value={contaCc} onChange={(e) => setContaCc(e.target.value)} placeholder="Ex: 98765-0" />
                     </div>
                   </>
                 ) : entidade === "categoria" ? (
