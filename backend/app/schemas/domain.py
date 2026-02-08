@@ -15,8 +15,11 @@ class AlunoOut(AlunoIn):
 class AlunoCadastroIn(BaseModel):
     nome: str
     login: str
-    senha: str
     telefone: str | None = None
+    email: str | None = None
+    data_aniversario: str | None = None
+    cep: str | None = None
+    endereco: str | None = None
     status: str = "ativo"
 
 
