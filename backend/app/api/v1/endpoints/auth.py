@@ -1,6 +1,5 @@
 ﻿from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 from app.db.session import get_db
 from app.schemas.auth import LoginInput, TokenOut, RefreshInput, UsuarioMe
 from app.services.auth_service import login, decode_token, create_token
@@ -13,7 +12,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 @router.post("/login", response_model=TokenOut)
 async def auth_login(payload: LoginInput, db: AsyncSession = Depends(get_db)):
-    return await login(db, payload.email, payload.senha)
+    return await login(db, payload.login, payload.senha)
 
 
 @router.post("/refresh", response_model=TokenOut)
@@ -26,5 +25,4 @@ async def auth_refresh(payload: RefreshInput):
 
 @router.get("/me", response_model=UsuarioMe)
 async def me(user: Usuario = Depends(get_current_user)):
-    return UsuarioMe(id=user.id, nome=user.nome, email=user.email, role=user.role)
-
+    return UsuarioMe(id=user.id, nome=user.nome, login=user.email, role=user.role)

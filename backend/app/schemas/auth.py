@@ -1,9 +1,9 @@
-﻿from pydantic import BaseModel, EmailStr
+﻿from pydantic import BaseModel
 from app.models.entities import Role
 
 
 class LoginInput(BaseModel):
-    email: EmailStr
+    login: str
     senha: str
 
 
@@ -20,6 +20,5 @@ class RefreshInput(BaseModel):
 class UsuarioMe(BaseModel):
     id: int
     nome: str
-    email: EmailStr
+    login: str
     role: Role
-

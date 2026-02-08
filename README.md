@@ -77,9 +77,9 @@ python -m app.scripts.seed_users
 
 Credenciais criadas:
 
-- gestor@appbeach.com / Admin@123
-- professor@appbeach.com / Prof@123
-- aluno@appbeach.com / Aluno@123
+- gestor / Admin@123
+- professor / Prof@123
+- aluno / Aluno@123
 
 No frontend em producao, configure:
 
@@ -87,3 +87,20 @@ No frontend em producao, configure:
 NEXT_PUBLIC_API_URL=http://SEU_IP:8010/api/v1
 ```
 
+
+
+### Cadastro de gestor e professores
+
+- Login agora e por palavra (`login`) e senha.
+- Para cadastrar usuarios reais, use `POST /api/v1/usuarios` autenticado com perfil `gestor`.
+
+Exemplo body:
+
+```json
+{
+  "nome": "Professor Carlos",
+  "login": "carlos",
+  "senha": "Carlos@123",
+  "role": "professor"
+}
+```

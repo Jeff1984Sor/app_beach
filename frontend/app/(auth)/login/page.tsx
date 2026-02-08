@@ -17,14 +17,14 @@ type LoginResponse = {
 type MeResponse = {
   id: number;
   nome: string;
-  email: string;
+  login: string;
   role: Role;
 };
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8010/api/v1";
 
 export default function LoginPage() {
-  const [email, setEmail] = useState("");
+  const [login, setLogin] = useState("");
   const [senha, setSenha] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -39,7 +39,7 @@ export default function LoginPage() {
       const loginRes = await fetch(`${API_URL}/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, senha }),
+        body: JSON.stringify({ login, senha }),
       });
 
       if (!loginRes.ok) {
@@ -80,8 +80,8 @@ export default function LoginPage() {
         </div>
         <Card className="border border-border/70 p-6 backdrop-blur">
           <form onSubmit={onSubmit} className="space-y-4">
-            <Input placeholder="Seu e-mail" value={email} onChange={(e) => setEmail(e.target.value)} required />
-            <Input placeholder="Sua senha" type="password" value={senha} onChange={(e) => setSenha(e.target.value)} required />
+            <Input placeholder="Login" value={login} onChange={(e) => setLogin(e.target.value)} required />
+            <Input placeholder="Senha" type="password" value={senha} onChange={(e) => setSenha(e.target.value)} required />
             {error && <p className="text-sm text-danger">{error}</p>}
             <Button className="h-12 w-full bg-gradient-to-r from-primary to-sky-500" disabled={loading}>{loading ? "Entrando..." : "Entrar"}</Button>
           </form>

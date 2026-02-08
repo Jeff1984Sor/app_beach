@@ -7,8 +7,8 @@ from app.core.config import settings
 from app.models.entities import Usuario
 
 
-async def login(db: AsyncSession, email: str, senha: str):
-    user = await db.scalar(select(Usuario).where(Usuario.email == email, Usuario.ativo == True))
+async def login(db: AsyncSession, login: str, senha: str):
+    user = await db.scalar(select(Usuario).where(Usuario.email == login, Usuario.ativo == True))
     if not user or not verify_password(senha, user.senha_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Credenciais invalidas")
 
