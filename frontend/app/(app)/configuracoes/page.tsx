@@ -240,10 +240,12 @@ CONTRATADA: ______________________`);
   return (
     <main className="space-y-5">
       <Section title={title} subtitle="Padrao premium com editar, deletar e modal de novo cadastro">
-        <div className="flex flex-wrap gap-2">
-          <a href="/configuracoes?entidade=categoria" className={`rounded-xl px-3 py-2 text-sm ${entidade === "categoria" ? "bg-primary text-white" : "bg-white text-muted border border-border"}`}>Categoria</a>
-          <a href="/configuracoes?entidade=subcategoria" className={`rounded-xl px-3 py-2 text-sm ${entidade === "subcategoria" ? "bg-primary text-white" : "bg-white text-muted border border-border"}`}>Subcategoria</a>
-        </div>
+        {(entidade === "categoria" || entidade === "subcategoria") && (
+          <div className="flex flex-wrap gap-2">
+            <a href="/configuracoes?entidade=categoria" className={`rounded-xl px-3 py-2 text-sm ${entidade === "categoria" ? "bg-primary text-white" : "bg-white text-muted border border-border"}`}>Categoria</a>
+            <a href="/configuracoes?entidade=subcategoria" className={`rounded-xl px-3 py-2 text-sm ${entidade === "subcategoria" ? "bg-primary text-white" : "bg-white text-muted border border-border"}`}>Subcategoria</a>
+          </div>
+        )}
         <div className="flex justify-end">
           <button onClick={openNovo} className="inline-flex h-10 items-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-white shadow-soft">
             <Plus size={16} /> Novo
