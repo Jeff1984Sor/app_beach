@@ -15,3 +15,9 @@ class UsuarioOut(BaseModel):
     login: str
     role: Role
     ativo: bool
+
+
+class UsuarioUpdate(BaseModel):
+    nome: str
+    role: Role
+    ativo: bool = True

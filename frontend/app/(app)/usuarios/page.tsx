@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import { useEffect, useState } from "react";
+import { Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -17,17 +18,20 @@ type Usuario = {
   ativo: boolean;
 };
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8010/api/v1";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
 
 export default function UsuariosPage() {
-  const tokenStore = useAuthStore((s) => s.token);
-  const token = tokenStore || (typeof window !== "undefined" ? localStorage.getItem("auth_token") : null);
+  const token = useAuthStore((s) => s.token);
 
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [nome, setNome] = useState("");
   const [login, setLogin] = useState("");
   const [senha, setSenha] = useState("");
   const [role, setRole] = useState<Role>("professor");
+  const [editId, setEditId] = useState<number | null>(null);
+  const [editNome, setEditNome] = useState("");
+  const [editRole, setEditRole] = useState<Role>("professor");
+  const [editAtivo, setEditAtivo] = useState(true);
   const [msg, setMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -71,6 +75,47 @@ export default function UsuariosPage() {
     setLoading(false);
   }
 
+  function iniciarEdicao(u: Usuario) {
+    setEditId(u.id);
+    setEditNome(u.nome);
+    setEditRole((u.role === "gestor" ? "gestor" : "professor") as Role);
+    setEditAtivo(u.ativo);
+  }
+
+  async function salvarEdicao() {
+    if (!token || !editId) return;
+    const res = await fetch(`${API_URL}/usuarios/${editId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ nome: editNome, role: editRole, ativo: editAtivo }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      setMsg(body.detail || "Falha ao editar usuario.");
+      return;
+    }
+    setEditId(null);
+    setMsg("Usuario atualizado.");
+    await carregar();
+  }
+
+  async function apagar(id: number) {
+    if (!token) return;
+    const ok = window.confirm("Deseja apagar este usuario?");
+    if (!ok) return;
+    const res = await fetch(`${API_URL}/usuarios/${id}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      setMsg(body.detail || "Falha ao apagar usuario.");
+      return;
+    }
+    setMsg("Usuario apagado.");
+    await carregar();
+  }
+
   useEffect(() => {
     carregar();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -97,12 +142,40 @@ export default function UsuariosPage() {
       <Section title="Lista" subtitle="Usuarios cadastrados">
         <div className="space-y-2">
           {usuarios.map((u) => (
-            <Card key={u.id} className="flex items-center justify-between p-4">
-              <div>
-                <p className="font-semibold">{u.nome}</p>
-                <p className="text-sm text-muted">login: {u.login}</p>
+            <Card key={u.id} className="p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="font-semibold">{u.nome}</p>
+                  <p className="text-sm text-muted">login: {u.login}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="rounded-full bg-primary/10 px-3 py-1 text-xs text-primary">{u.role}</span>
+                  <button onClick={() => iniciarEdicao(u)} className="rounded-xl border border-border p-2 text-muted hover:text-text" aria-label="Editar">
+                    <Pencil size={16} />
+                  </button>
+                  <button onClick={() => apagar(u.id)} className="rounded-xl border border-border p-2 text-danger hover:bg-danger/10" aria-label="Apagar">
+                    <Trash2 size={16} />
+                  </button>
+                </div>
               </div>
-              <span className="rounded-full bg-primary/10 px-3 py-1 text-xs text-primary">{u.role}</span>
+
+              {editId === u.id && (
+                <div className="mt-3 space-y-2 rounded-2xl bg-bg p-3">
+                  <Input value={editNome} onChange={(e) => setEditNome(e.target.value)} />
+                  <select value={editRole} onChange={(e) => setEditRole(e.target.value as Role)} className="h-11 w-full rounded-2xl border border-border bg-white px-4 text-text outline-none">
+                    <option value="gestor">Gestor</option>
+                    <option value="professor">Professor</option>
+                  </select>
+                  <label className="flex items-center gap-2 text-sm text-muted">
+                    <input type="checkbox" checked={editAtivo} onChange={(e) => setEditAtivo(e.target.checked)} />
+                    Ativo
+                  </label>
+                  <div className="flex gap-2">
+                    <Button className="h-10 px-4" onClick={salvarEdicao}>Salvar</Button>
+                    <button onClick={() => setEditId(null)} className="h-10 rounded-xl border border-border px-4 text-sm">Cancelar</button>
+                  </div>
+                </div>
+              )}
             </Card>
           ))}
         </div>
@@ -110,4 +183,3 @@ export default function UsuariosPage() {
     </main>
   );
 }
-
