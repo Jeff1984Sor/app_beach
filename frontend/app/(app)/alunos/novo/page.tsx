@@ -93,6 +93,12 @@ export default function NovoAlunoPage() {
       setMsg(body.detail || "Falha ao salvar aluno");
       return;
     }
+    const body = await res.json().catch(() => ({}));
+    const alunoId = body?.id;
+    if (alunoId && window.confirm("Gostaria de cadastrar um contrato para o novo aluno?")) {
+      router.push(`/alunos/${alunoId}?tab=Contratos&novoContrato=1`);
+      return;
+    }
     router.push("/alunos");
   }
 

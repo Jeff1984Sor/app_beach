@@ -1,11 +1,11 @@
-﻿from datetime import date, datetime
+﻿from datetime import date, datetime, timedelta
 import calendar
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, text
 from app.db.session import get_db
 from app.api.deps import require_role
-from app.models.entities import Aluno, Usuario, Role, Aula, ContaReceber
+from app.models.entities import Aluno, Usuario, Role, Aula, ContaReceber, Agenda, Unidade, Profissional
 from app.schemas.domain import AlunoIn, AlunoCadastroIn
 from app.core.security import get_password_hash
 
@@ -63,6 +63,11 @@ def add_months(base: date, months: int) -> date:
 def recorrencia_to_meses(recorrencia: str) -> int:
     mapa = {"mensal": 1, "trimestral": 3, "semestral": 6, "anual": 12}
     return mapa.get((recorrencia or "").lower(), 1)
+
+
+def dia_label_to_weekday(dia: str) -> int | None:
+    mapa = {"seg": 0, "ter": 1, "qua": 2, "qui": 3, "sex": 4, "sab": 5, "dom": 6}
+    return mapa.get((dia or "").strip().lower()[:3])
 
 
 async def get_details(db: AsyncSession, aluno_id: int) -> dict:
@@ -263,7 +268,107 @@ async def criar_contrato(aluno_id: int, payload: dict, db: AsyncSession = Depend
         criadas.append(venc.strftime("%d/%m/%Y"))
 
     await db.commit()
-    return {"ok": True, "contrato_id": contrato_id, "contas_receber_criadas": len(criadas), "vencimentos": criadas}
+    return {
+        "ok": True,
+        "contrato_id": contrato_id,
+        "contas_receber_criadas": len(criadas),
+        "vencimentos": criadas,
+        "data_inicio": data_inicio.strftime("%Y-%m-%d"),
+        "data_fim": data_fim.strftime("%Y-%m-%d"),
+    }
+
+
+@router.post("/{aluno_id}/contratos/{contrato_id}/reservas")
+async def criar_reservas_contrato(aluno_id: int, contrato_id: int, payload: dict, db: AsyncSession = Depends(get_db)):
+    contrato = (
+        await db.execute(
+            text(
+                """
+                SELECT id, data_inicio, data_fim, valor, dias_semana
+                FROM aluno_contratos
+                WHERE id = :contrato_id AND aluno_id = :aluno_id
+                """
+            ),
+            {"contrato_id": contrato_id, "aluno_id": aluno_id},
+        )
+    ).first()
+    if not contrato:
+        raise HTTPException(status_code=404, detail="Contrato nao encontrado")
+
+    row_aluno = await db.get(Aluno, aluno_id)
+    if not row_aluno:
+        raise HTTPException(status_code=404, detail="Aluno nao encontrado")
+
+    unidade_nome = payload.get("unidade")
+    hora_inicio_txt = payload.get("hora_inicio") or "18:00"
+    duracao_min = int(payload.get("duracao_minutos") or 60)
+    dias = payload.get("dias_semana") or []
+    if not dias:
+        dias = [d for d in (contrato[4] or "").split(",") if d]
+    weekdays = [dia_label_to_weekday(d) for d in dias]
+    weekdays = [d for d in weekdays if d is not None]
+    if not weekdays:
+        raise HTTPException(status_code=400, detail="Selecione ao menos um dia da semana")
+
+    unidade = await db.scalar(select(Unidade).where(Unidade.nome == unidade_nome)) if unidade_nome else None
+    if not unidade:
+        unidade = await db.scalar(select(Unidade).limit(1))
+    if not unidade:
+        unidade = Unidade(nome=unidade_nome or "Unidade Padrao", cep="00000000", endereco="Nao informado")
+        db.add(unidade)
+        await db.flush()
+
+    prof = await db.scalar(select(Profissional).limit(1))
+    if not prof:
+        raise HTTPException(status_code=400, detail="Cadastre ao menos um profissional para reservar agenda")
+
+    try:
+        h, m = (hora_inicio_txt or "18:00").split(":")
+        hour = int(h)
+        minute = int(m)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Hora invalida, use HH:MM")
+
+    inicio_periodo = contrato[1]
+    fim_periodo = contrato[2]
+    valor = float(contrato[3] or 0)
+    aulas_criadas = 0
+    data_cursor = inicio_periodo
+
+    while data_cursor <= fim_periodo:
+        if data_cursor.weekday() in weekdays:
+            agenda = await db.scalar(select(Agenda).where(Agenda.unidade_id == unidade.id, Agenda.data == data_cursor))
+            if not agenda:
+                agenda = Agenda(unidade_id=unidade.id, data=data_cursor)
+                db.add(agenda)
+                await db.flush()
+
+            inicio_dt = datetime(data_cursor.year, data_cursor.month, data_cursor.day, hour, minute)
+            fim_dt = inicio_dt + timedelta(minutes=duracao_min)
+            existe = await db.scalar(
+                select(Aula).where(
+                    Aula.agenda_id == agenda.id,
+                    Aula.aluno_id == aluno_id,
+                    Aula.inicio == inicio_dt,
+                )
+            )
+            if not existe:
+                db.add(
+                    Aula(
+                        agenda_id=agenda.id,
+                        aluno_id=aluno_id,
+                        professor_id=prof.id,
+                        inicio=inicio_dt,
+                        fim=fim_dt,
+                        status="agendada",
+                        valor=valor,
+                    )
+                )
+                aulas_criadas += 1
+        data_cursor += timedelta(days=1)
+
+    await db.commit()
+    return {"ok": True, "aulas_criadas": aulas_criadas}
 
 
 @router.post("")
@@ -334,3 +439,5 @@ async def delete_aluno(aluno_id: int, db: AsyncSession = Depends(get_db)):
     await db.delete(row)
     await db.commit()
     return {"ok": True}
+
+

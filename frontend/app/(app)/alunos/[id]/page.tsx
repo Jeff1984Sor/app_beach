@@ -1,7 +1,7 @@
 ﻿"use client";
 
-import { useMemo, useState } from "react";
-import { useParams } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { CalendarPlus, MessageCircle, ReceiptText, Pencil } from "lucide-react";
@@ -33,6 +33,16 @@ function calcularIdade(dataIso: string): string {
   return idade >= 0 ? String(idade) : "";
 }
 
+function addMonths(baseIso: string, months: number): string {
+  if (!baseIso) return "";
+  const [yy, mm, dd] = baseIso.split("-").map(Number);
+  if (!yy || !mm || !dd) return "";
+  const base = new Date(yy, mm - 1, dd);
+  const out = new Date(base);
+  out.setMonth(out.getMonth() + months);
+  return out.toISOString().slice(0, 10);
+}
+
 async function fetchFicha(id: string) {
   const res = await fetch(`${API_URL}/alunos/${id}/ficha`, { cache: "no-store" });
   if (!res.ok) throw new Error("Falha ao carregar ficha");
@@ -40,11 +50,19 @@ async function fetchFicha(id: string) {
 }
 
 const tabs = ["Aulas", "Financeiro", "Contratos", "WhatsApp"];
+const planos = [
+  { nome: "Mensal Gold", valor: 380, recorrencia: "mensal", aulasSemanais: 3 },
+  { nome: "Trimestral Pro", valor: 340, recorrencia: "trimestral", aulasSemanais: 3 },
+  { nome: "Semestral Elite", valor: 320, recorrencia: "semestral", aulasSemanais: 3 },
+  { nome: "Anual Champion", valor: 300, recorrencia: "anual", aulasSemanais: 3 },
+];
 
 export default function AlunoFichaPage() {
   const params = useParams<{ id: string }>();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const qc = useQueryClient();
-  const [tab, setTab] = useState("Aulas");
+  const [tab, setTab] = useState(searchParams.get("tab") || "Aulas");
   const [openEdit, setOpenEdit] = useState(false);
   const [email, setEmail] = useState("");
   const [telefone, setTelefone] = useState("");
@@ -53,14 +71,30 @@ export default function AlunoFichaPage() {
   const [endereco, setEndereco] = useState("");
   const [unidade, setUnidade] = useState("Unidade Sul");
   const [openContrato, setOpenContrato] = useState(false);
-  const [planoNome, setPlanoNome] = useState("Plano Mensal");
+  const [planoNome, setPlanoNome] = useState(planos[0].nome);
   const [recorrencia, setRecorrencia] = useState("mensal");
   const [valor, setValor] = useState("380");
   const [qtdAulas, setQtdAulas] = useState("3");
   const [dataInicio, setDataInicio] = useState(new Date().toISOString().slice(0, 10));
   const [diasSemana, setDiasSemana] = useState<string[]>(["Seg", "Qua", "Sex"]);
+  const [dataFimPreview, setDataFimPreview] = useState("");
 
   const { data, isLoading } = useQuery({ queryKey: ["aluno-ficha", params.id], queryFn: () => fetchFicha(params.id) });
+
+  useEffect(() => {
+    const desiredTab = searchParams.get("tab");
+    if (desiredTab && tabs.includes(desiredTab)) setTab(desiredTab);
+    if (searchParams.get("novoContrato") === "1") {
+      setTab("Contratos");
+      setOpenContrato(true);
+      router.replace(`/alunos/${params.id}?tab=Contratos`);
+    }
+  }, [searchParams, router, params.id]);
+
+  useEffect(() => {
+    const meses = recorrencia === "trimestral" ? 3 : recorrencia === "semestral" ? 6 : recorrencia === "anual" ? 12 : 1;
+    setDataFimPreview(addMonths(dataInicio, meses));
+  }, [dataInicio, recorrencia]);
 
   const resumoFinanceiro = useMemo(() => {
     if (!data) return { aberto: "R$ 0", pago: "R$ 0", proximo: "--" };
@@ -97,9 +131,18 @@ export default function AlunoFichaPage() {
     setDiasSemana((prev) => prev.includes(dia) ? prev.filter((d) => d !== dia) : [...prev, dia]);
   }
 
+  function selecionarPlano(nomePlano: string) {
+    setPlanoNome(nomePlano);
+    const plano = planos.find((p) => p.nome === nomePlano);
+    if (!plano) return;
+    setValor(String(plano.valor));
+    setRecorrencia(plano.recorrencia);
+    setQtdAulas(String(plano.aulasSemanais));
+  }
+
   async function criarContrato() {
     if (!data) return;
-    await fetch(`${API_URL}/alunos/${data.id}/contratos`, {
+    const res = await fetch(`${API_URL}/alunos/${data.id}/contratos`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -111,16 +154,27 @@ export default function AlunoFichaPage() {
         dias_semana: diasSemana,
       }),
     });
+    if (!res.ok) return;
+    const body = await res.json();
     setOpenContrato(false);
     qc.invalidateQueries({ queryKey: ["aluno-ficha", params.id] });
+    if (body?.contrato_id) {
+      router.push(`/alunos/${data.id}/agenda-contrato?contratoId=${body.contrato_id}`);
+    }
   }
 
   async function buscarCepEdicao(cepValue: string) {
     const clean = cepValue.replace(/\D/g, "");
     if (clean.length !== 8) return;
-    const res = await fetch(`${API_URL}/public/cep/${clean}`);
-    if (!res.ok) return;
-    const dataCep = await res.json();
+    const local = await fetch(`${API_URL}/public/cep/${clean}`).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+    let dataCep = local;
+    if (!dataCep || !dataCep.logradouro) {
+      const viacep = await fetch(`https://viacep.com.br/ws/${clean}/json/`).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+      if (viacep && !viacep.erro) {
+        dataCep = { logradouro: viacep.logradouro, bairro: viacep.bairro, cidade: viacep.localidade, uf: viacep.uf };
+      }
+    }
+    if (!dataCep) return;
     const enderecoAuto = [dataCep.logradouro, dataCep.bairro, dataCep.cidade, dataCep.uf].filter(Boolean).join(", ");
     if (enderecoAuto) setEndereco(enderecoAuto);
   }
@@ -196,7 +250,11 @@ export default function AlunoFichaPage() {
 
       <Modal open={openContrato} onClose={() => setOpenContrato(false)} title="Novo contrato">
         <div className="space-y-3">
-          <Input placeholder="Plano" value={planoNome} onChange={(e) => setPlanoNome(e.target.value)} />
+          <select value={planoNome} onChange={(e) => selecionarPlano(e.target.value)} className="h-12 w-full rounded-2xl border border-border bg-white px-4 text-text outline-none">
+            {planos.map((p) => (
+              <option key={p.nome} value={p.nome}>{p.nome}</option>
+            ))}
+          </select>
           <Input placeholder="Valor" value={valor} onChange={(e) => setValor(e.target.value)} />
           <select value={recorrencia} onChange={(e) => setRecorrencia(e.target.value)} className="h-12 w-full rounded-2xl border border-border bg-white px-4 text-text outline-none">
             <option value="mensal">Mensal</option>
@@ -206,6 +264,7 @@ export default function AlunoFichaPage() {
           </select>
           <Input placeholder="Quantidade de aulas semanais" value={qtdAulas} onChange={(e) => setQtdAulas(e.target.value)} />
           <Input type="date" value={dataInicio} onChange={(e) => setDataInicio(e.target.value)} />
+          <Input value={formatarDataBR(dataFimPreview)} readOnly placeholder="Data fim" />
           <div className="flex flex-wrap gap-2">
             {["Seg", "Ter", "Qua", "Qui", "Sex", "Sab", "Dom"].map((d) => (
               <button key={d} onClick={() => toggleDia(d)} className={`rounded-xl px-3 py-2 text-sm ${diasSemana.includes(d) ? "bg-primary text-white" : "border border-border bg-white text-text"}`}>
@@ -213,7 +272,7 @@ export default function AlunoFichaPage() {
               </button>
             ))}
           </div>
-          <Button className="w-full" onClick={criarContrato}>Criar contrato e gerar contas a receber</Button>
+          <Button className="w-full" onClick={criarContrato}>Salvar contrato e escolher dias na agenda</Button>
         </div>
       </Modal>
     </main>
