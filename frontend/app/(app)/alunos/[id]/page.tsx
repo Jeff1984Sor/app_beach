@@ -81,6 +81,7 @@ export default function AlunoFichaPage() {
   const [aulaSelecionadaId, setAulaSelecionadaId] = useState<number | null>(null);
   const [reagendarData, setReagendarData] = useState("");
   const [reagendarHora, setReagendarHora] = useState("");
+  const [aulasSelecionadas, setAulasSelecionadas] = useState<number[]>([]);
 
   const { data, isLoading } = useQuery({ queryKey: ["aluno-ficha", params.id], queryFn: () => fetchFicha(params.id) });
   const { data: unidades = [] } = useQuery<{ id: number; nome: string }[]>({
@@ -280,6 +281,31 @@ export default function AlunoFichaPage() {
     qc.invalidateQueries({ queryKey: ["aluno-ficha", params.id] });
   }
 
+  function toggleAulaSelecionada(aulaId: number) {
+    setAulasSelecionadas((prev) => (prev.includes(aulaId) ? prev.filter((id) => id !== aulaId) : [...prev, aulaId]));
+  }
+
+  function selecionarTodasAulas() {
+    const selecionaveis = (data?.aulas || [])
+      .filter((a: any) => String(a.status || "").toLowerCase() !== "realizada")
+      .map((a: any) => a.id as number);
+    if (aulasSelecionadas.length === selecionaveis.length) {
+      setAulasSelecionadas([]);
+      return;
+    }
+    setAulasSelecionadas(selecionaveis);
+  }
+
+  async function excluirAulasSelecionadas() {
+    if (!data || aulasSelecionadas.length === 0) return;
+    if (!window.confirm(`Deseja excluir ${aulasSelecionadas.length} aula(s)?`)) return;
+    for (const aulaId of aulasSelecionadas) {
+      await fetch(`${API_URL}/alunos/${data.id}/aulas/${aulaId}`, { method: "DELETE" });
+    }
+    setAulasSelecionadas([]);
+    qc.invalidateQueries({ queryKey: ["aluno-ficha", params.id] });
+  }
+
   function abrirEdicaoContrato(c: any) {
     setEditingContratoId(c.id);
     selecionarPlano(c.plano);
@@ -348,7 +374,48 @@ export default function AlunoFichaPage() {
 
       <AnimatePresence mode="wait">
         <motion.div key={tab} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}>
-          {tab === "Aulas" && <Section title="Aulas"><div className="space-y-3">{data.aulas.map((a: any) => <Card key={a.id} className="space-y-3 p-4"><div className="flex items-center justify-between"><div><p className="font-semibold">{a.data} • {a.hora}</p><p className="text-sm text-muted">{a.unidade}</p></div><Badge tone={a.status === "confirmada" || a.status === "realizada" ? "success" : a.status === "pendente" ? "default" : "danger"}>{a.status}</Badge></div><div className="flex gap-2"><button onClick={() => abrirReagendar(a)} className="rounded-xl border border-border px-3 py-2 text-sm text-text hover:bg-bg">Reagendar</button><button onClick={() => deletarAula(a.id)} className="rounded-xl border border-border px-3 py-2 text-sm text-danger hover:bg-danger/10">Deletar</button></div></Card>)}</div></Section>}
+          {tab === "Aulas" && (
+            <Section title="Aulas">
+              <div className="mb-3 flex flex-wrap gap-2">
+                <button onClick={selecionarTodasAulas} className="rounded-xl border border-border px-3 py-2 text-sm text-text hover:bg-bg">
+                  {aulasSelecionadas.length > 0 ? "Desmarcar todas" : "Selecionar todas"}
+                </button>
+                <button
+                  onClick={excluirAulasSelecionadas}
+                  disabled={aulasSelecionadas.length === 0}
+                  className="rounded-xl border border-border px-3 py-2 text-sm text-danger enabled:hover:bg-danger/10 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Excluir selecionadas ({aulasSelecionadas.length})
+                </button>
+              </div>
+              <div className="space-y-3">
+                {data.aulas.map((a: any) => (
+                  <Card key={a.id} className="space-y-3 p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 accent-[#0A84FF]"
+                          checked={aulasSelecionadas.includes(a.id)}
+                          disabled={String(a.status || "").toLowerCase() === "realizada"}
+                          onChange={() => toggleAulaSelecionada(a.id)}
+                        />
+                        <div>
+                          <p className="font-semibold">{a.data} • {a.hora}</p>
+                          <p className="text-sm text-muted">{a.unidade}</p>
+                        </div>
+                      </div>
+                      <Badge tone={a.status === "confirmada" || a.status === "realizada" ? "success" : a.status === "pendente" ? "default" : "danger"}>{a.status}</Badge>
+                    </div>
+                    <div className="flex gap-2">
+                      <button onClick={() => abrirReagendar(a)} className="rounded-xl border border-border px-3 py-2 text-sm text-text hover:bg-bg">Reagendar</button>
+                      <button onClick={() => deletarAula(a.id)} className="rounded-xl border border-border px-3 py-2 text-sm text-danger hover:bg-danger/10">Deletar</button>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            </Section>
+          )}
           {tab === "Financeiro" && <Section title="Financeiro"><div className="grid gap-3 sm:grid-cols-3"><Card><p className="text-sm text-muted">Total em aberto</p><p className="text-2xl font-semibold">{resumoFinanceiro.aberto}</p></Card><Card><p className="text-sm text-muted">Total pago</p><p className="text-2xl font-semibold">{resumoFinanceiro.pago}</p></Card><Card><p className="text-sm text-muted">Proximo vencimento</p><p className="text-2xl font-semibold">{resumoFinanceiro.proximo}</p></Card></div></Section>}
           {tab === "Contratos" && <Section title="Contratos"><div className="mb-3"><Button onClick={() => { setEditingContratoId(null); setPlanoNome(""); setValor(""); setRecorrencia(""); setQtdAulas(""); setDataInicio(""); setHoraAula(""); setDiasSemana([]); setMsgContrato(""); setOpenContrato(true); }}>Novo contrato</Button></div><div className="space-y-3">{data.contratos.map((c: any) => <Card key={c.id} className="space-y-2 p-4"><div className="flex items-start justify-between gap-2"><div><p className="text-lg font-semibold">{c.plano}</p><p className="text-sm text-muted">Inicio: {c.inicio} • Fim: {c.fim}</p></div><div className="flex items-center gap-2"><button onClick={() => abrirEdicaoContrato(c)} className="rounded-xl border border-border p-2 text-muted hover:bg-bg"><Pencil size={14} /></button><button onClick={() => deletarContrato(c.id)} className="rounded-xl border border-border p-2 text-danger hover:bg-danger/10"><Trash2 size={14} /></button></div></div><div className="flex items-center justify-between"><Badge tone="success">{c.status}</Badge></div></Card>)}</div></Section>}
           {tab === "WhatsApp" && <Section title="WhatsApp"><div className="space-y-3">{data.mensagens.map((m: any) => <Card key={m.id} className="space-y-1 p-4"><p className="text-sm">{m.texto}</p><div className="flex items-center justify-between text-xs text-muted"><span>{m.quando}</span><span>{m.status}</span></div></Card>)}</div></Section>}
