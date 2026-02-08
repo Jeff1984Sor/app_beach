@@ -510,6 +510,59 @@ async def criar_reservas_contrato(aluno_id: int, contrato_id: int, payload: dict
     return {"ok": True, "aulas_criadas": aulas_criadas}
 
 
+@router.put("/{aluno_id}/aulas/{aula_id}/reagendar")
+async def reagendar_aula(aluno_id: int, aula_id: int, payload: dict, db: AsyncSession = Depends(get_db)):
+    aula = await db.scalar(select(Aula).where(Aula.id == aula_id, Aula.aluno_id == aluno_id))
+    if not aula:
+        raise HTTPException(status_code=404, detail="Aula nao encontrada")
+    if (aula.status or "").lower() == "realizada":
+        raise HTTPException(status_code=400, detail="Aula realizada nao pode ser reagendada")
+
+    data_txt = payload.get("data")
+    hora_txt = payload.get("hora")
+    if not data_txt or not hora_txt:
+        raise HTTPException(status_code=400, detail="Informe data e hora")
+
+    try:
+        data_base = datetime.strptime(data_txt, "%Y-%m-%d").date()
+        hh, mm = hora_txt.split(":")
+        novo_inicio = datetime(data_base.year, data_base.month, data_base.day, int(hh), int(mm))
+    except Exception:
+        raise HTTPException(status_code=400, detail="Formato invalido. Use data YYYY-MM-DD e hora HH:MM")
+
+    duracao = int((aula.fim - aula.inicio).total_seconds() // 60) if aula.fim and aula.inicio else 60
+    novo_fim = novo_inicio + timedelta(minutes=max(duracao, 30))
+
+    agenda_atual = await db.get(Agenda, aula.agenda_id)
+    if not agenda_atual:
+        raise HTTPException(status_code=400, detail="Agenda da aula nao encontrada")
+
+    agenda_destino = await db.scalar(select(Agenda).where(Agenda.unidade_id == agenda_atual.unidade_id, Agenda.data == data_base))
+    if not agenda_destino:
+        agenda_destino = Agenda(unidade_id=agenda_atual.unidade_id, data=data_base)
+        db.add(agenda_destino)
+        await db.flush()
+
+    aula.agenda_id = agenda_destino.id
+    aula.inicio = novo_inicio
+    aula.fim = novo_fim
+    aula.status = "agendada"
+    await db.commit()
+    return {"ok": True}
+
+
+@router.delete("/{aluno_id}/aulas/{aula_id}")
+async def deletar_aula_aluno(aluno_id: int, aula_id: int, db: AsyncSession = Depends(get_db)):
+    aula = await db.scalar(select(Aula).where(Aula.id == aula_id, Aula.aluno_id == aluno_id))
+    if not aula:
+        raise HTTPException(status_code=404, detail="Aula nao encontrada")
+    if (aula.status or "").lower() == "realizada":
+        raise HTTPException(status_code=400, detail="Aula realizada nao pode ser deletada")
+    await db.delete(aula)
+    await db.commit()
+    return {"ok": True}
+
+
 @router.post("")
 async def create_aluno(payload: AlunoIn, db: AsyncSession = Depends(get_db)):
     row = Aluno(**payload.model_dump())

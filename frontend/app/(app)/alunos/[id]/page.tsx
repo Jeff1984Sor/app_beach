@@ -68,15 +68,19 @@ export default function AlunoFichaPage() {
   const [unidade, setUnidade] = useState("");
   const [openContrato, setOpenContrato] = useState(false);
   const [planoNome, setPlanoNome] = useState("");
-  const [recorrencia, setRecorrencia] = useState("mensal");
-  const [valor, setValor] = useState("380");
-  const [qtdAulas, setQtdAulas] = useState("3");
-  const [dataInicio, setDataInicio] = useState(new Date().toISOString().slice(0, 10));
+  const [recorrencia, setRecorrencia] = useState("");
+  const [valor, setValor] = useState("");
+  const [qtdAulas, setQtdAulas] = useState("");
+  const [dataInicio, setDataInicio] = useState("");
   const [diasSemana, setDiasSemana] = useState<string[]>([]);
   const [dataFimPreview, setDataFimPreview] = useState("");
-  const [horaAula, setHoraAula] = useState("18:00");
+  const [horaAula, setHoraAula] = useState("");
   const [editingContratoId, setEditingContratoId] = useState<number | null>(null);
   const [msgContrato, setMsgContrato] = useState<string>("");
+  const [openReagendar, setOpenReagendar] = useState(false);
+  const [aulaSelecionadaId, setAulaSelecionadaId] = useState<number | null>(null);
+  const [reagendarData, setReagendarData] = useState("");
+  const [reagendarHora, setReagendarHora] = useState("");
 
   const { data, isLoading } = useQuery({ queryKey: ["aluno-ficha", params.id], queryFn: () => fetchFicha(params.id) });
   const { data: unidades = [] } = useQuery<{ id: number; nome: string }[]>({
@@ -193,6 +197,14 @@ export default function AlunoFichaPage() {
       setMsgContrato("Cadastre e selecione um plano antes de salvar o contrato.");
       return;
     }
+    if (!dataInicio) {
+      setMsgContrato("Informe a data de inicio do contrato.");
+      return;
+    }
+    if (!horaAula) {
+      setMsgContrato("Selecione o horario.");
+      return;
+    }
     setMsgContrato("");
     const url = editingContratoId
       ? `${API_URL}/alunos/${data.id}/contratos/${editingContratoId}`
@@ -237,6 +249,35 @@ export default function AlunoFichaPage() {
       setMsgContrato("Contrato e aulas criados com sucesso.");
     }
     setTab("Aulas");
+  }
+
+  function abrirReagendar(aula: any) {
+    setAulaSelecionadaId(aula.id);
+    const [dd, mm, yyyy] = String(aula.data || "").split("/");
+    setReagendarData(dd && mm && yyyy ? `${yyyy}-${mm}-${dd}` : "");
+    setReagendarHora(aula.hora || "");
+    setOpenReagendar(true);
+  }
+
+  async function salvarReagendamento() {
+    if (!data || !aulaSelecionadaId) return;
+    const res = await fetch(`${API_URL}/alunos/${data.id}/aulas/${aulaSelecionadaId}/reagendar`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ data: reagendarData, hora: reagendarHora }),
+    });
+    if (!res.ok) return;
+    setOpenReagendar(false);
+    setAulaSelecionadaId(null);
+    qc.invalidateQueries({ queryKey: ["aluno-ficha", params.id] });
+  }
+
+  async function deletarAula(aulaId: number) {
+    if (!data) return;
+    if (!window.confirm("Deseja realmente deletar esta aula?")) return;
+    const res = await fetch(`${API_URL}/alunos/${data.id}/aulas/${aulaId}`, { method: "DELETE" });
+    if (!res.ok) return;
+    qc.invalidateQueries({ queryKey: ["aluno-ficha", params.id] });
   }
 
   function abrirEdicaoContrato(c: any) {
@@ -307,9 +348,9 @@ export default function AlunoFichaPage() {
 
       <AnimatePresence mode="wait">
         <motion.div key={tab} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}>
-          {tab === "Aulas" && <Section title="Aulas"><div className="space-y-3">{data.aulas.map((a: any) => <Card key={a.id} className="flex items-center justify-between p-4"><div><p className="font-semibold">{a.data} • {a.hora}</p><p className="text-sm text-muted">{a.unidade}</p></div><Badge tone={a.status === "confirmada" || a.status === "realizada" ? "success" : a.status === "pendente" ? "default" : "danger"}>{a.status}</Badge></Card>)}</div></Section>}
+          {tab === "Aulas" && <Section title="Aulas"><div className="space-y-3">{data.aulas.map((a: any) => <Card key={a.id} className="space-y-3 p-4"><div className="flex items-center justify-between"><div><p className="font-semibold">{a.data} • {a.hora}</p><p className="text-sm text-muted">{a.unidade}</p></div><Badge tone={a.status === "confirmada" || a.status === "realizada" ? "success" : a.status === "pendente" ? "default" : "danger"}>{a.status}</Badge></div><div className="flex gap-2"><button onClick={() => abrirReagendar(a)} className="rounded-xl border border-border px-3 py-2 text-sm text-text hover:bg-bg">Reagendar</button><button onClick={() => deletarAula(a.id)} className="rounded-xl border border-border px-3 py-2 text-sm text-danger hover:bg-danger/10">Deletar</button></div></Card>)}</div></Section>}
           {tab === "Financeiro" && <Section title="Financeiro"><div className="grid gap-3 sm:grid-cols-3"><Card><p className="text-sm text-muted">Total em aberto</p><p className="text-2xl font-semibold">{resumoFinanceiro.aberto}</p></Card><Card><p className="text-sm text-muted">Total pago</p><p className="text-2xl font-semibold">{resumoFinanceiro.pago}</p></Card><Card><p className="text-sm text-muted">Proximo vencimento</p><p className="text-2xl font-semibold">{resumoFinanceiro.proximo}</p></Card></div></Section>}
-          {tab === "Contratos" && <Section title="Contratos"><div className="mb-3"><Button onClick={() => { setEditingContratoId(null); setPlanoNome(""); setValor("0"); setRecorrencia(""); setQtdAulas("0"); setDiasSemana([]); setMsgContrato(""); setOpenContrato(true); }}>Novo contrato</Button></div><div className="space-y-3">{data.contratos.map((c: any) => <Card key={c.id} className="space-y-2 p-4"><div className="flex items-start justify-between gap-2"><div><p className="text-lg font-semibold">{c.plano}</p><p className="text-sm text-muted">Inicio: {c.inicio} • Fim: {c.fim}</p></div><div className="flex items-center gap-2"><button onClick={() => abrirEdicaoContrato(c)} className="rounded-xl border border-border p-2 text-muted hover:bg-bg"><Pencil size={14} /></button><button onClick={() => deletarContrato(c.id)} className="rounded-xl border border-border p-2 text-danger hover:bg-danger/10"><Trash2 size={14} /></button></div></div><div className="flex items-center justify-between"><Badge tone="success">{c.status}</Badge></div></Card>)}</div></Section>}
+          {tab === "Contratos" && <Section title="Contratos"><div className="mb-3"><Button onClick={() => { setEditingContratoId(null); setPlanoNome(""); setValor(""); setRecorrencia(""); setQtdAulas(""); setDataInicio(""); setHoraAula(""); setDiasSemana([]); setMsgContrato(""); setOpenContrato(true); }}>Novo contrato</Button></div><div className="space-y-3">{data.contratos.map((c: any) => <Card key={c.id} className="space-y-2 p-4"><div className="flex items-start justify-between gap-2"><div><p className="text-lg font-semibold">{c.plano}</p><p className="text-sm text-muted">Inicio: {c.inicio} • Fim: {c.fim}</p></div><div className="flex items-center gap-2"><button onClick={() => abrirEdicaoContrato(c)} className="rounded-xl border border-border p-2 text-muted hover:bg-bg"><Pencil size={14} /></button><button onClick={() => deletarContrato(c.id)} className="rounded-xl border border-border p-2 text-danger hover:bg-danger/10"><Trash2 size={14} /></button></div></div><div className="flex items-center justify-between"><Badge tone="success">{c.status}</Badge></div></Card>)}</div></Section>}
           {tab === "WhatsApp" && <Section title="WhatsApp"><div className="space-y-3">{data.mensagens.map((m: any) => <Card key={m.id} className="space-y-1 p-4"><p className="text-sm">{m.texto}</p><div className="flex items-center justify-between text-xs text-muted"><span>{m.quando}</span><span>{m.status}</span></div></Card>)}</div></Section>}
         </motion.div>
       </AnimatePresence>
@@ -380,6 +421,7 @@ export default function AlunoFichaPage() {
 
           <p className="text-xs font-medium uppercase tracking-wide text-muted">Horario</p>
           <select value={horaAula} onChange={(e) => setHoraAula(e.target.value)} className="h-12 w-full rounded-2xl border border-border bg-white px-4 text-text outline-none">
+            <option value="">Selecione o horario</option>
             {horasCheias.map((h) => (
               <option key={h} value={h}>{h}</option>
             ))}
@@ -387,6 +429,19 @@ export default function AlunoFichaPage() {
 
           {msgContrato && <p className="text-sm text-danger">{msgContrato}</p>}
           <Button className="w-full" onClick={criarContrato}>{editingContratoId ? "Salvar alteracoes do contrato" : "Salvar contrato e criar aulas"}</Button>
+        </div>
+      </Modal>
+
+      <Modal open={openReagendar} onClose={() => setOpenReagendar(false)} title="Reagendar aula">
+        <div className="space-y-3">
+          <Input type="date" value={reagendarData} onChange={(e) => setReagendarData(e.target.value)} />
+          <select value={reagendarHora} onChange={(e) => setReagendarHora(e.target.value)} className="h-12 w-full rounded-2xl border border-border bg-white px-4 text-text outline-none">
+            <option value="">Selecione o horario</option>
+            {horasCheias.map((h) => (
+              <option key={h} value={h}>{h}</option>
+            ))}
+          </select>
+          <Button className="w-full" onClick={salvarReagendamento}>Salvar reagendamento</Button>
         </div>
       </Modal>
     </main>
