@@ -8,6 +8,7 @@ from app.api.v1.endpoints.bancario import router as bancario_router
 from app.api.v1.endpoints.planos import router as planos_router
 from app.api.v1.endpoints.unidades import router as unidades_router
 from app.api.v1.endpoints.usuarios import router as usuarios_router
+from app.api.v1.endpoints.categorias import router as categorias_router
 
 router = APIRouter(prefix="/api/v1")
 router.include_router(auth_router)
@@ -19,3 +20,4 @@ router.include_router(bancario_router)
 router.include_router(planos_router)
 router.include_router(unidades_router)
 router.include_router(usuarios_router)
+router.include_router(categorias_router)

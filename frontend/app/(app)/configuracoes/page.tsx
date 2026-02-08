@@ -66,6 +66,22 @@ type MovimentacaoApi = {
   subcategoria?: string;
 };
 
+type CategoriaApi = {
+  id: number;
+  nome: string;
+  tipo: "Receita" | "Despesa";
+  status: "ativo" | "inativo";
+};
+
+type SubcategoriaApi = {
+  id: number;
+  nome: string;
+  categoria_id: number;
+  categoria_nome: string;
+  categoria_tipo: "Receita" | "Despesa";
+  status: "ativo" | "inativo";
+};
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
 
 const LABELS: Record<Entidade, string> = {
@@ -233,6 +249,24 @@ CONTRATADA: ______________________`);
     },
     enabled: entidade === "movimentacoes_financeiras",
   });
+  const { data: categoriasApi = [] } = useQuery<CategoriaApi[]>({
+    queryKey: ["categorias-config"],
+    queryFn: async () => {
+      const res = await fetch(`${API_URL}/categorias`, { cache: "no-store" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: entidade === "categoria" || entidade === "subcategoria" || entidade === "plano",
+  });
+  const { data: subcategoriasApi = [] } = useQuery<SubcategoriaApi[]>({
+    queryKey: ["subcategorias-config"],
+    queryFn: async () => {
+      const res = await fetch(`${API_URL}/subcategorias`, { cache: "no-store" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: entidade === "subcategoria" || entidade === "plano",
+  });
 
   const items = useMemo(() => {
     if (entidade === "conta_bancaria") {
@@ -251,6 +285,22 @@ CONTRATADA: ______________________`);
         status: "ativo" as const,
       }));
     }
+    if (entidade === "categoria") {
+      return categoriasApi.map((c) => ({
+        id: c.id,
+        titulo: c.nome,
+        detalhe: c.tipo,
+        status: c.status,
+      }));
+    }
+    if (entidade === "subcategoria") {
+      return subcategoriasApi.map((s) => ({
+        id: s.id,
+        titulo: s.nome,
+        detalhe: `Categoria: ${s.categoria_nome} | Tipo: ${s.categoria_tipo}`,
+        status: s.status,
+      }));
+    }
     if (entidade !== "plano") return data[entidade] || [];
     return planosApi.map((p) => ({
       id: p.id,
@@ -258,13 +308,20 @@ CONTRATADA: ______________________`);
       detalhe: `${Number(p.valor || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} | ${p.recorrencia.charAt(0).toUpperCase() + p.recorrencia.slice(1)} | ${p.qtd_aulas_semanais} aulas/sem | ${p.categoria || "Sem categoria"} / ${p.subcategoria || "Sem subcategoria"}`,
       status: p.status,
     }));
-  }, [data, entidade, planosApi, contasBancariasApi, movimentacoesApi]);
-  const categoriasAtivas = useMemo(() => data.categoria.map((x) => x.titulo), [data]);
+  }, [data, entidade, planosApi, contasBancariasApi, movimentacoesApi, categoriasApi, subcategoriasApi]);
+  const categoriasAtivas = useMemo(
+    () => (categoriasApi.length ? categoriasApi.filter((x) => x.status === "ativo").map((x) => x.nome) : data.categoria.map((x) => x.titulo)),
+    [data, categoriasApi]
+  );
+  const subcategoriasFiltradasPlano = useMemo(
+    () => subcategoriasApi.filter((s) => !planoCategoria || s.categoria_nome === planoCategoria),
+    [subcategoriasApi, planoCategoria]
+  );
   const title = LABELS[entidade] || "Configuracoes";
 
   function tipoDaCategoria(nomeCategoria: string): "Receita" | "Despesa" {
-    const cat = data.categoria.find((x) => x.titulo === nomeCategoria);
-    return cat?.detalhe === "Despesa" ? "Despesa" : "Receita";
+    const cat = categoriasApi.find((x) => x.nome === nomeCategoria);
+    return cat?.tipo === "Despesa" ? "Despesa" : "Receita";
   }
 
   function openNovo() {
@@ -313,11 +370,12 @@ CONTRATADA: ______________________`);
       }
     }
     if (entidade === "categoria") {
-      setCategoriaTipo(item.detalhe === "Despesa" ? "Despesa" : "Receita");
+      const categoria = categoriasApi.find((c) => c.id === item.id);
+      setCategoriaTipo(categoria?.tipo || "Receita");
     }
     if (entidade === "subcategoria") {
-      const cat = item.detalhe.match(/Categoria:\s*([^|]+)/)?.[1]?.trim() || "";
-      setSubcategoriaCategoria(cat);
+      const sub = subcategoriasApi.find((s) => s.id === item.id);
+      setSubcategoriaCategoria(sub?.categoria_nome || "");
     }
     if (entidade === "modelo_contrato") {
       setContratoTexto(item.detalhe);
@@ -362,16 +420,35 @@ CONTRATADA: ______________________`);
       }
       return;
     }
+    if (entidade === "categoria") {
+      const payload = { nome: titulo, tipo: categoriaTipo, status };
+      const url = editId ? `${API_URL}/categorias/${editId}` : `${API_URL}/categorias`;
+      const method = editId ? "PUT" : "POST";
+      const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      if (res.ok) {
+        qc.invalidateQueries({ queryKey: ["categorias-config"] });
+        qc.invalidateQueries({ queryKey: ["subcategorias-config"] });
+        setOpen(false);
+      }
+      return;
+    }
+    if (entidade === "subcategoria") {
+      const categoria = categoriasApi.find((c) => c.nome === subcategoriaCategoria);
+      if (!categoria) return;
+      const payload = { nome: titulo, categoria_id: categoria.id, status };
+      const url = editId ? `${API_URL}/subcategorias/${editId}` : `${API_URL}/subcategorias`;
+      const method = editId ? "PUT" : "POST";
+      const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      if (res.ok) {
+        qc.invalidateQueries({ queryKey: ["categorias-config"] });
+        qc.invalidateQueries({ queryKey: ["subcategorias-config"] });
+        setOpen(false);
+      }
+      return;
+    }
     setData((prev) => {
       const atual = [...prev[entidade]];
-      const detalheFinal =
-        entidade === "categoria"
-            ? categoriaTipo
-            : entidade === "subcategoria"
-              ? `Categoria: ${subcategoriaCategoria} | Tipo: ${tipoDaCategoria(subcategoriaCategoria)}`
-          : entidade === "modelo_contrato"
-              ? contratoTexto
-          : detalhe;
+      const detalheFinal = entidade === "modelo_contrato" ? contratoTexto : detalhe;
       if (editId) {
         const idx = atual.findIndex((x) => x.id === editId);
         if (idx >= 0) atual[idx] = { ...atual[idx], titulo, detalhe: detalheFinal, status };
@@ -396,6 +473,19 @@ CONTRATADA: ______________________`);
     if (entidade === "conta_bancaria") {
       const res = await fetch(`${API_URL}/contas-bancarias/${id}`, { method: "DELETE" });
       if (res.ok) qc.invalidateQueries({ queryKey: ["contas-bancarias-config"] });
+      return;
+    }
+    if (entidade === "categoria") {
+      const res = await fetch(`${API_URL}/categorias/${id}`, { method: "DELETE" });
+      if (res.ok) {
+        qc.invalidateQueries({ queryKey: ["categorias-config"] });
+        qc.invalidateQueries({ queryKey: ["subcategorias-config"] });
+      }
+      return;
+    }
+    if (entidade === "subcategoria") {
+      const res = await fetch(`${API_URL}/subcategorias/${id}`, { method: "DELETE" });
+      if (res.ok) qc.invalidateQueries({ queryKey: ["subcategorias-config"] });
       return;
     }
     if (entidade === "movimentacoes_financeiras") return;
@@ -486,11 +576,40 @@ CONTRATADA: ______________________`);
                     </div>
                     <div className="space-y-1">
                       <p className="text-xs font-medium uppercase tracking-wide text-muted">Categoria</p>
-                      <Input value={planoCategoria} onChange={(e) => setPlanoCategoria(e.target.value)} placeholder="Ex: Mensalidades" />
+                      <select
+                        value={planoCategoria}
+                        onChange={(e) => {
+                          setPlanoCategoria(e.target.value);
+                          setPlanoSubcategoria("");
+                        }}
+                        className="h-12 w-full rounded-2xl border border-border bg-white px-4 text-text outline-none"
+                      >
+                        <option value="">Selecione</option>
+                        {categoriasApi
+                          .filter((c) => c.status === "ativo")
+                          .map((c) => (
+                            <option key={c.id} value={c.nome}>
+                              {c.nome}
+                            </option>
+                          ))}
+                      </select>
                     </div>
                     <div className="space-y-1">
                       <p className="text-xs font-medium uppercase tracking-wide text-muted">Subcategoria</p>
-                      <Input value={planoSubcategoria} onChange={(e) => setPlanoSubcategoria(e.target.value)} placeholder="Ex: Plano Mensal Gold" />
+                      <select
+                        value={planoSubcategoria}
+                        onChange={(e) => setPlanoSubcategoria(e.target.value)}
+                        className="h-12 w-full rounded-2xl border border-border bg-white px-4 text-text outline-none"
+                      >
+                        <option value="">Selecione</option>
+                        {subcategoriasFiltradasPlano
+                          .filter((s) => s.status === "ativo")
+                          .map((s) => (
+                            <option key={s.id} value={s.nome}>
+                              {s.nome}
+                            </option>
+                          ))}
+                      </select>
                     </div>
                   </>
                 ) : entidade === "conta_bancaria" ? (
