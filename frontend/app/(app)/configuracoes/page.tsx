@@ -66,6 +66,13 @@ type MovimentacaoApi = {
   subcategoria?: string;
 };
 
+type UnidadeApi = {
+  id: number;
+  nome: string;
+  cep: string;
+  endereco: string;
+};
+
 type CategoriaApi = {
   id: number;
   nome: string;
@@ -174,6 +181,8 @@ export default function ConfiguracoesPage() {
   const [contaBanco, setContaBanco] = useState("");
   const [contaAgencia, setContaAgencia] = useState("");
   const [contaCc, setContaCc] = useState("");
+  const [unidadeCep, setUnidadeCep] = useState("");
+  const [unidadeEndereco, setUnidadeEndereco] = useState("");
   const [categoriaTipo, setCategoriaTipo] = useState<"Receita" | "Despesa">("Receita");
   const [subcategoriaCategoria, setSubcategoriaCategoria] = useState("");
   const [contratoTexto, setContratoTexto] = useState(`CONTRATO DE PRESTACAO DE SERVICOS - BEACH TENNIS
@@ -240,6 +249,15 @@ CONTRATADA: ______________________`);
     },
     enabled: entidade === "conta_bancaria",
   });
+  const { data: unidadesApi = [] } = useQuery<UnidadeApi[]>({
+    queryKey: ["unidades-config"],
+    queryFn: async () => {
+      const res = await fetch(`${API_URL}/unidades`, { cache: "no-store" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: entidade === "unidades",
+  });
   const { data: movimentacoesApi = [] } = useQuery<MovimentacaoApi[]>({
     queryKey: ["movimentacoes-financeiras-config"],
     queryFn: async () => {
@@ -269,6 +287,14 @@ CONTRATADA: ______________________`);
   });
 
   const items = useMemo(() => {
+    if (entidade === "unidades") {
+      return unidadesApi.map((u) => ({
+        id: u.id,
+        titulo: u.nome,
+        detalhe: `${(u.cep || "").trim() || "--"} • ${(u.endereco || "").trim() || "Nao informado"}`,
+        status: "ativo" as const,
+      }));
+    }
     if (entidade === "conta_bancaria") {
       return contasBancariasApi.map((c) => ({
         id: c.id,
@@ -308,7 +334,7 @@ CONTRATADA: ______________________`);
       detalhe: `${Number(p.valor || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} | ${p.recorrencia.charAt(0).toUpperCase() + p.recorrencia.slice(1)} | ${p.qtd_aulas_semanais} aulas/sem | ${p.categoria || "Sem categoria"} / ${p.subcategoria || "Sem subcategoria"}`,
       status: p.status,
     }));
-  }, [data, entidade, planosApi, contasBancariasApi, movimentacoesApi, categoriasApi, subcategoriasApi]);
+  }, [data, entidade, planosApi, contasBancariasApi, unidadesApi, movimentacoesApi, categoriasApi, subcategoriasApi]);
   const categoriasAtivas = useMemo(
     () => (categoriasApi.length ? categoriasApi.filter((x) => x.status === "ativo").map((x) => x.nome) : data.categoria.map((x) => x.titulo)),
     [data, categoriasApi]
@@ -337,6 +363,8 @@ CONTRATADA: ______________________`);
     setContaBanco("");
     setContaAgencia("");
     setContaCc("");
+    setUnidadeCep("");
+    setUnidadeEndereco("");
     setCategoriaTipo("Receita");
     setSubcategoriaCategoria(categoriasAtivas[0] || "");
     if (entidade === "modelo_contrato") {
@@ -358,6 +386,14 @@ CONTRATADA: ______________________`);
         setPlanoAulas(String(plano.qtd_aulas_semanais));
         setPlanoCategoria(plano.categoria || "");
         setPlanoSubcategoria(plano.subcategoria || "");
+      }
+    }
+    if (entidade === "unidades") {
+      const un = unidadesApi.find((u) => u.id === item.id);
+      if (un) {
+        setTitulo(un.nome || "");
+        setUnidadeCep(un.cep || "");
+        setUnidadeEndereco(un.endereco || "");
       }
     }
     if (entidade === "conta_bancaria") {
@@ -420,6 +456,18 @@ CONTRATADA: ______________________`);
       }
       return;
     }
+    if (entidade === "unidades") {
+      const payload = { nome: titulo, cep: unidadeCep, endereco: unidadeEndereco };
+      const url = editId ? `${API_URL}/unidades/${editId}` : `${API_URL}/unidades`;
+      const method = editId ? "PUT" : "POST";
+      const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      if (res.ok) {
+        qc.invalidateQueries({ queryKey: ["unidades-config"] });
+        qc.invalidateQueries({ queryKey: ["unidades"] });
+        setOpen(false);
+      }
+      return;
+    }
     if (entidade === "categoria") {
       const payload = { nome: titulo, tipo: categoriaTipo, status };
       const url = editId ? `${API_URL}/categorias/${editId}` : `${API_URL}/categorias`;
@@ -473,6 +521,14 @@ CONTRATADA: ______________________`);
     if (entidade === "conta_bancaria") {
       const res = await fetch(`${API_URL}/contas-bancarias/${id}`, { method: "DELETE" });
       if (res.ok) qc.invalidateQueries({ queryKey: ["contas-bancarias-config"] });
+      return;
+    }
+    if (entidade === "unidades") {
+      const res = await fetch(`${API_URL}/unidades/${id}`, { method: "DELETE" });
+      if (res.ok) {
+        qc.invalidateQueries({ queryKey: ["unidades-config"] });
+        qc.invalidateQueries({ queryKey: ["unidades"] });
+      }
       return;
     }
     if (entidade === "categoria") {
@@ -625,6 +681,17 @@ CONTRATADA: ______________________`);
                     <div className="space-y-1">
                       <p className="text-xs font-medium uppercase tracking-wide text-muted">Conta Corrente</p>
                       <Input value={contaCc} onChange={(e) => setContaCc(e.target.value)} placeholder="Ex: 98765-0" />
+                    </div>
+                  </>
+                ) : entidade === "unidades" ? (
+                  <>
+                    <div className="space-y-1">
+                      <p className="text-xs font-medium uppercase tracking-wide text-muted">CEP</p>
+                      <Input value={unidadeCep} onChange={(e) => setUnidadeCep(e.target.value)} placeholder="00000000" />
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-xs font-medium uppercase tracking-wide text-muted">Endereco</p>
+                      <Input value={unidadeEndereco} onChange={(e) => setUnidadeEndereco(e.target.value)} placeholder="Rua, numero, bairro, cidade" />
                     </div>
                   </>
                 ) : entidade === "categoria" ? (
