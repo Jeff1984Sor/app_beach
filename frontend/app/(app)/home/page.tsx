@@ -29,17 +29,17 @@ const mapRole: Record<string, Kpi[]> = {
 };
 
 const tabelas = [
-  { nome: "Usuarios (inclui profissionais)", href: "/usuarios" },
-  { nome: "Alunos", href: "/alunos" },
-  { nome: "Unidades", href: "/home" },
-  { nome: "Agenda", href: "/agenda" },
-  { nome: "Aulas", href: "/agenda" },
-  { nome: "Contas Receber", href: "/financeiro" },
-  { nome: "Contas Pagar", href: "/financeiro" },
-  { nome: "Movimentos Bancarios", href: "/financeiro" },
-  { nome: "Regras Comissao", href: "/financeiro" },
-  { nome: "Media Files", href: "/home" },
-  { nome: "Empresa Config", href: "/home" }
+  { nome: "Usuarios", entidade: "usuarios" },
+  { nome: "Alunos", entidade: "alunos" },
+  { nome: "Unidades", entidade: "unidades" },
+  { nome: "Agenda", entidade: "agenda" },
+  { nome: "Aulas", entidade: "aulas" },
+  { nome: "Contas Receber", entidade: "contas_receber" },
+  { nome: "Contas Pagar", entidade: "contas_pagar" },
+  { nome: "Movimentos Bancarios", entidade: "movimentos_bancarios" },
+  { nome: "Regras Comissao", entidade: "regras_comissao" },
+  { nome: "Media Files", entidade: "media_files" },
+  { nome: "Empresa Config", entidade: "empresa_config" }
 ];
 
 export default function HomePage() {
@@ -57,7 +57,7 @@ export default function HomePage() {
           </summary>
           <div className="absolute right-0 z-20 mt-2 max-h-80 w-56 overflow-auto rounded-2xl border border-border bg-white p-2 shadow-soft">
             {tabelas.map((item) => (
-              <Link key={item.nome} href={item.href} className="block rounded-xl px-3 py-2 text-sm text-text hover:bg-bg">
+              <Link key={item.entidade} href={`/configuracoes?entidade=${item.entidade}`} className="block rounded-xl px-3 py-2 text-sm text-text hover:bg-bg">
                 {item.nome}
               </Link>
             ))}
