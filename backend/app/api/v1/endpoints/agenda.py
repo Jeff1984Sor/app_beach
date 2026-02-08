@@ -1,7 +1,7 @@
 from datetime import date, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select, text
+from sqlalchemy import select, text, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
@@ -73,12 +73,13 @@ async def listar_agenda(data: date | None = None, profissional_id: int | None = 
             Aluno.id,
             Unidade.nome,
         )
-        .join(Agenda, Aula.agenda_id == Agenda.id)
+        .join(Agenda, Aula.agenda_id == Agenda.id, isouter=True)
         .join(Profissional, Profissional.id == Aula.professor_id)
         .join(Usuario, Usuario.id == Profissional.usuario_id)
         .join(Aluno, Aluno.id == Aula.aluno_id)
-        .join(Unidade, Unidade.id == Agenda.unidade_id)
-        .where(Agenda.data == dia)
+        .join(Unidade, Unidade.id == Agenda.unidade_id, isouter=True)
+        # Use the timestamp itself as source-of-truth; tolerate orphaned agenda_id rows.
+        .where(func.date(Aula.inicio) == dia)
         .order_by(Aula.inicio.asc())
     )
     if profissional_id:
@@ -158,14 +159,14 @@ async def listar_agenda_periodo(
             Usuario.nome,
             Aluno.id,
             Unidade.nome,
-            Agenda.data,
+            func.date(Aula.inicio).label("data"),
         )
-        .join(Agenda, Aula.agenda_id == Agenda.id)
+        .join(Agenda, Aula.agenda_id == Agenda.id, isouter=True)
         .join(Profissional, Profissional.id == Aula.professor_id)
         .join(Usuario, Usuario.id == Profissional.usuario_id)
         .join(Aluno, Aluno.id == Aula.aluno_id)
-        .join(Unidade, Unidade.id == Agenda.unidade_id)
-        .where(Agenda.data.between(data_inicio, data_fim))
+        .join(Unidade, Unidade.id == Agenda.unidade_id, isouter=True)
+        .where(func.date(Aula.inicio).between(data_inicio, data_fim))
         .order_by(Aula.inicio.asc())
     )
     if profissional_id:
@@ -205,7 +206,7 @@ async def listar_agenda_periodo(
                 "professor_id": r[4],
                 "professor_nome": r[5],
                 "aluno_id": r[6],
-                "unidade": r[7],
+                "unidade": r[7] or "",
                 "data": r[8].strftime("%Y-%m-%d") if r[8] else None,
             }
             for r in aulas_rows
