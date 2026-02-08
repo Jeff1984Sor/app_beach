@@ -55,6 +55,7 @@ class Aula(Base, TimestampMixin):
     __tablename__ = "aulas"
     id: Mapped[int] = mapped_column(primary_key=True)
     agenda_id: Mapped[int] = mapped_column(ForeignKey("agendas.id"))
+    contrato_id: Mapped[int | None] = mapped_column(nullable=True)
     aluno_id: Mapped[int] = mapped_column(ForeignKey("alunos.id"))
     professor_id: Mapped[int] = mapped_column(ForeignKey("profissionais.id"))
     inicio: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
@@ -66,6 +67,7 @@ class Aula(Base, TimestampMixin):
 class ContaReceber(Base, TimestampMixin):
     __tablename__ = "contas_receber"
     id: Mapped[int] = mapped_column(primary_key=True)
+    contrato_id: Mapped[int | None] = mapped_column(nullable=True)
     aluno_id: Mapped[int] = mapped_column(ForeignKey("alunos.id"))
     vencimento: Mapped[date] = mapped_column(Date)
     valor: Mapped[float] = mapped_column(Numeric(10, 2))

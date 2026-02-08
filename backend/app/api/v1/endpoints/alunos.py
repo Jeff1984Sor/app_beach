@@ -52,6 +52,32 @@ async def ensure_contracts_table(db: AsyncSession):
     await db.commit()
 
 
+async def ensure_contract_links(db: AsyncSession):
+    await db.execute(
+        text(
+            """
+            DO $$
+            BEGIN
+              IF NOT EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'aulas' AND column_name = 'contrato_id'
+              ) THEN
+                ALTER TABLE aulas ADD COLUMN contrato_id INTEGER;
+              END IF;
+
+              IF NOT EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'contas_receber' AND column_name = 'contrato_id'
+              ) THEN
+                ALTER TABLE contas_receber ADD COLUMN contrato_id INTEGER;
+              END IF;
+            END $$;
+            """
+        )
+    )
+    await db.commit()
+
+
 def add_months(base: date, months: int) -> date:
     month = base.month - 1 + months
     year = base.year + month // 12
@@ -241,6 +267,7 @@ async def gerar_contrato(aluno_id: int, payload: dict, db: AsyncSession = Depend
 @router.post("/{aluno_id}/contratos")
 async def criar_contrato(aluno_id: int, payload: dict, db: AsyncSession = Depends(get_db)):
     await ensure_contracts_table(db)
+    await ensure_contract_links(db)
     row = await db.get(Aluno, aluno_id)
     if not row:
         raise HTTPException(status_code=404, detail="Aluno nao encontrado")
@@ -283,7 +310,7 @@ async def criar_contrato(aluno_id: int, payload: dict, db: AsyncSession = Depend
     criadas = []
     for i in range(meses):
         venc = add_months(data_inicio, i)
-        conta = ContaReceber(aluno_id=aluno_id, vencimento=venc, valor=valor, status="aberto")
+        conta = ContaReceber(contrato_id=contrato_id, aluno_id=aluno_id, vencimento=venc, valor=valor, status="aberto")
         db.add(conta)
         criadas.append(venc.strftime("%d/%m/%Y"))
 
@@ -355,6 +382,29 @@ async def atualizar_contrato(aluno_id: int, contrato_id: int, payload: dict, db:
 @router.delete("/{aluno_id}/contratos/{contrato_id}")
 async def deletar_contrato(aluno_id: int, contrato_id: int, db: AsyncSession = Depends(get_db)):
     await ensure_contracts_table(db)
+    await ensure_contract_links(db)
+    await db.execute(
+        text(
+            """
+            DELETE FROM contas_receber
+            WHERE contrato_id = :contrato_id
+              AND aluno_id = :aluno_id
+              AND COALESCE(status, 'aberto') = 'aberto'
+            """
+        ),
+        {"contrato_id": contrato_id, "aluno_id": aluno_id},
+    )
+    await db.execute(
+        text(
+            """
+            DELETE FROM aulas
+            WHERE contrato_id = :contrato_id
+              AND aluno_id = :aluno_id
+              AND LOWER(COALESCE(status, 'agendada')) <> 'realizada'
+            """
+        ),
+        {"contrato_id": contrato_id, "aluno_id": aluno_id},
+    )
     res = await db.execute(
         text("DELETE FROM aluno_contratos WHERE id = :contrato_id AND aluno_id = :aluno_id"),
         {"contrato_id": contrato_id, "aluno_id": aluno_id},
@@ -367,6 +417,7 @@ async def deletar_contrato(aluno_id: int, contrato_id: int, db: AsyncSession = D
 
 @router.post("/{aluno_id}/contratos/{contrato_id}/reservas")
 async def criar_reservas_contrato(aluno_id: int, contrato_id: int, payload: dict, db: AsyncSession = Depends(get_db)):
+    await ensure_contract_links(db)
     contrato = (
         await db.execute(
             text(
@@ -443,6 +494,7 @@ async def criar_reservas_contrato(aluno_id: int, contrato_id: int, payload: dict
                 db.add(
                     Aula(
                         agenda_id=agenda.id,
+                        contrato_id=contrato_id,
                         aluno_id=aluno_id,
                         professor_id=prof.id,
                         inicio=inicio_dt,
