@@ -130,13 +130,25 @@ export default function UsuariosPage() {
       <Section title="Usuarios" subtitle="Cadastre apenas gestor e professor. Aluno e cadastrado em Alunos.">
         <Card className="space-y-3">
           <form onSubmit={onSubmit} className="space-y-3">
-            <Input placeholder="Nome" value={nome} onChange={(e) => setNome(e.target.value)} required />
-            <Input placeholder="Login (palavra)" value={login} onChange={(e) => setLogin(e.target.value)} required />
-            <Input placeholder="Senha" type="password" value={senha} onChange={(e) => setSenha(e.target.value)} required />
+            <div className="space-y-1">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted">Nome</p>
+              <Input placeholder="Nome" value={nome} onChange={(e) => setNome(e.target.value)} required />
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted">Login</p>
+              <Input placeholder="Login (palavra)" value={login} onChange={(e) => setLogin(e.target.value)} required />
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted">Senha</p>
+              <Input placeholder="Senha" type="password" value={senha} onChange={(e) => setSenha(e.target.value)} required />
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted">Perfil</p>
             <select value={role} onChange={(e) => setRole(e.target.value as Role)} className="h-12 w-full rounded-2xl border border-border bg-white px-4 text-text outline-none">
               <option value="gestor">Gestor</option>
               <option value="professor">Professor</option>
             </select>
+            </div>
             {msg && <p className="text-sm text-muted">{msg}</p>}
             <Button className="h-11 w-full" disabled={loading}>{loading ? "Salvando..." : "Cadastrar"}</Button>
           </form>
@@ -165,13 +177,25 @@ export default function UsuariosPage() {
 
               {editId === u.id && (
                 <div className="mt-3 space-y-2 rounded-2xl bg-bg p-3">
-                  <Input value={editNome} onChange={(e) => setEditNome(e.target.value)} />
-                  <Input value={editLogin} onChange={(e) => setEditLogin(e.target.value)} placeholder="Login" />
-                  <Input value={editSenha} onChange={(e) => setEditSenha(e.target.value)} placeholder="Nova senha (opcional)" type="password" />
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted">Nome</p>
+                    <Input value={editNome} onChange={(e) => setEditNome(e.target.value)} />
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted">Login</p>
+                    <Input value={editLogin} onChange={(e) => setEditLogin(e.target.value)} placeholder="Login" />
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted">Senha</p>
+                    <Input value={editSenha} onChange={(e) => setEditSenha(e.target.value)} placeholder="Nova senha (opcional)" type="password" />
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted">Perfil</p>
                   <select value={editRole} onChange={(e) => setEditRole(e.target.value as Role)} className="h-11 w-full rounded-2xl border border-border bg-white px-4 text-text outline-none">
                     <option value="gestor">Gestor</option>
                     <option value="professor">Professor</option>
                   </select>
+                  </div>
                   <label className="flex items-center gap-2 text-sm text-muted">
                     <input type="checkbox" checked={editAtivo} onChange={(e) => setEditAtivo(e.target.checked)} />
                     Ativo
