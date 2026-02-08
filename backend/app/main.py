@@ -1,7 +1,9 @@
-﻿from fastapi import FastAPI
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
 from app.api.v1.router import router
 from app.core.config import settings
+from app.core.startup import ensure_admin_user
 
 app = FastAPI(title=settings.app_name)
 
@@ -13,6 +15,12 @@ app.add_middleware(
 )
 
 app.include_router(router)
+
+
+@app.on_event("startup")
+async def startup():
+    # Prevent being locked out after deploys due to empty/changed DB.
+    await ensure_admin_user()
 
 
 @app.get("/health")
