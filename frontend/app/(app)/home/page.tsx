@@ -41,6 +41,7 @@ const tabelas = [
   { nome: "Plano", entidade: "plano" },
   { nome: "Categoria", entidade: "categoria" },
   { nome: "Subcategoria", entidade: "subcategoria" },
+  { nome: "Modelo de Contrato", entidade: "modelo_contrato" },
   { nome: "Media Files", entidade: "media_files" },
   { nome: "Empresa Config", entidade: "empresa_config" }
 ];
