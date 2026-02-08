@@ -48,6 +48,10 @@ async def ficha_aluno(aluno_id: int, db: AsyncSession = Depends(get_db)):
     return {
         "id": aluno.id,
         "nome": user.nome,
+        "login": user.email,
+        "email": None,
+        "data_aniversario": None,
+        "endereco": None,
         "status": aluno.status,
         "telefone": aluno.telefone,
         "unidade": "Unidade Sul",

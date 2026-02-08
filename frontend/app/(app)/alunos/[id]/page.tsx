@@ -61,11 +61,13 @@ export default function AlunoFichaPage() {
           <div>
             <h1 className="text-3xl font-semibold tracking-tight">{data.nome}</h1>
             <p className="mt-1 text-sm text-muted">{data.telefone || "Sem telefone"} • {data.unidade}</p>
+            <p className="mt-1 text-xs text-muted">Email: {data.email || "Nao informado"} • Aniversario: {data.data_aniversario || "Nao informado"}</p>
+            <p className="mt-1 text-xs text-muted">Endereco: {data.endereco || "Nao informado"}</p>
           </div>
           <Badge tone={data.status === "ativo" ? "success" : "danger"}>{data.status}</Badge>
         </div>
         <div className="grid gap-2 sm:grid-cols-3">
-          <button className="rounded-2xl border border-border bg-white px-4 py-3 text-sm font-medium text-text"> <MessageCircle size={15} className="mr-2 inline" /> WhatsApp </button>
+          <a href={`https://wa.me/55${String(data.telefone || "").replace(/\D/g, "")}`} target="_blank" className="rounded-2xl border border-border bg-white px-4 py-3 text-sm font-medium text-text"> <MessageCircle size={15} className="mr-2 inline" /> WhatsApp </a>
           <button className="rounded-2xl border border-border bg-white px-4 py-3 text-sm font-medium text-text"> <CalendarPlus size={15} className="mr-2 inline" /> Nova Aula </button>
           <button className="rounded-2xl border border-border bg-white px-4 py-3 text-sm font-medium text-text"> <ReceiptText size={15} className="mr-2 inline" /> Nova Cobranca </button>
         </div>
