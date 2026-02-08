@@ -77,7 +77,7 @@ export default function ConfiguracoesPage() {
   const [detalhe, setDetalhe] = useState("");
   const [status, setStatus] = useState<"ativo" | "inativo">("ativo");
   const [planoValor, setPlanoValor] = useState("");
-  const [planoDuracao, setPlanoDuracao] = useState("");
+  const [planoDuracao, setPlanoDuracao] = useState("Mensal");
   const [planoAulas, setPlanoAulas] = useState("");
 
   const items = useMemo(() => data[entidade] || [], [data, entidade]);
@@ -89,7 +89,7 @@ export default function ConfiguracoesPage() {
     setDetalhe("");
     setStatus("ativo");
     setPlanoValor("");
-    setPlanoDuracao("");
+    setPlanoDuracao("Mensal");
     setPlanoAulas("");
     setOpen(true);
   }
@@ -102,7 +102,7 @@ export default function ConfiguracoesPage() {
     if (entidade === "plano") {
       const parts = item.detalhe.split("|").map((x) => x.trim());
       setPlanoValor(parts[0]?.replace("R$ ", "") || "");
-      setPlanoDuracao(parts[1]?.replace(" dias", "") || "");
+      setPlanoDuracao(parts[1] || "Mensal");
       setPlanoAulas(parts[2]?.replace(" aulas/sem", "") || "");
     }
     setOpen(true);
@@ -113,7 +113,7 @@ export default function ConfiguracoesPage() {
       const atual = [...prev[entidade]];
       const detalheFinal =
         entidade === "plano"
-          ? `R$ ${planoValor} | ${planoDuracao} dias | ${planoAulas} aulas/sem`
+          ? `${planoValor} | ${planoDuracao} | ${planoAulas} aulas/sem`
           : detalhe;
       if (editId) {
         const idx = atual.findIndex((x) => x.id === editId);
@@ -188,11 +188,16 @@ export default function ConfiguracoesPage() {
                   <>
                     <div className="space-y-1">
                       <p className="text-xs font-medium uppercase tracking-wide text-muted">Valor</p>
-                      <Input value={planoValor} onChange={(e) => setPlanoValor(e.target.value)} placeholder="Ex: 380" />
+                      <Input value={planoValor} onChange={(e) => setPlanoValor(e.target.value)} placeholder="R$ 380,00" />
                     </div>
                     <div className="space-y-1">
                       <p className="text-xs font-medium uppercase tracking-wide text-muted">Duracao</p>
-                      <Input value={planoDuracao} onChange={(e) => setPlanoDuracao(e.target.value)} placeholder="Ex: 30 (dias)" />
+                      <select value={planoDuracao} onChange={(e) => setPlanoDuracao(e.target.value)} className="h-12 w-full rounded-2xl border border-border bg-white px-4 text-text outline-none">
+                        <option>Mensal</option>
+                        <option>Trimestral</option>
+                        <option>Semestral</option>
+                        <option>Anual</option>
+                      </select>
                     </div>
                     <div className="space-y-1">
                       <p className="text-xs font-medium uppercase tracking-wide text-muted">Quantidade de aulas semanais</p>
