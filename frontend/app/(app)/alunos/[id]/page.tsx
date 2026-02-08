@@ -15,6 +15,13 @@ import { Modal } from "@/components/ui/modal";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
 
+function formatarDataBR(dataIso: string): string {
+  if (!dataIso) return "";
+  const m = dataIso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return dataIso;
+  return `${m[3]}/${m[2]}/${m[1]}`;
+}
+
 function calcularIdade(dataIso: string): string {
   if (!dataIso) return "";
   const nasc = new Date(`${dataIso}T00:00:00`);
@@ -79,6 +86,16 @@ export default function AlunoFichaPage() {
     qc.invalidateQueries({ queryKey: ["alunos-lista"] });
   }
 
+  async function buscarCepEdicao(cepValue: string) {
+    const clean = cepValue.replace(/\D/g, "");
+    if (clean.length !== 8) return;
+    const res = await fetch(`${API_URL}/public/cep/${clean}`);
+    if (!res.ok) return;
+    const dataCep = await res.json();
+    const enderecoAuto = [dataCep.logradouro, dataCep.bairro, dataCep.cidade, dataCep.uf].filter(Boolean).join(", ");
+    if (enderecoAuto) setEndereco(enderecoAuto);
+  }
+
   if (isLoading || !data) {
     return (
       <main className="space-y-4">
@@ -96,7 +113,7 @@ export default function AlunoFichaPage() {
           <div>
             <h1 className="text-3xl font-semibold tracking-tight">{data.nome}</h1>
             <p className="mt-1 text-sm text-muted">{data.telefone || "Sem telefone"} • {data.unidade}</p>
-            <p className="mt-1 text-xs text-muted">Email: {data.email || "Nao informado"} • Aniversario: {data.data_aniversario || "Nao informado"} • Idade: {calcularIdade(data.data_aniversario || "") || "Nao informada"}</p>
+            <p className="mt-1 text-xs text-muted">Email: {data.email || "Nao informado"} • Aniversario: {formatarDataBR(data.data_aniversario || "") || "Nao informado"} • Idade: {calcularIdade(data.data_aniversario || "") || "Nao informada"}</p>
             <p className="mt-1 text-xs text-muted">Endereco: {data.endereco || "Nao informado"}</p>
           </div>
           <div className="flex items-center gap-2">
@@ -130,7 +147,16 @@ export default function AlunoFichaPage() {
             <Input type="date" placeholder="Data de aniversario" value={aniversario} onChange={(e) => setAniversario(e.target.value)} />
             <Input placeholder="Idade (calculada)" value={calcularIdade(aniversario)} readOnly />
           </div>
-          <Input placeholder="CEP" value={cep} onChange={(e) => setCep(e.target.value)} />
+          <Input
+            placeholder="CEP"
+            value={cep}
+            onChange={(e) => {
+              const v = e.target.value;
+              setCep(v);
+              if (v.replace(/\D/g, "").length === 8) buscarCepEdicao(v);
+            }}
+            onBlur={(e) => buscarCepEdicao(e.target.value)}
+          />
           <Input placeholder="Endereco" value={endereco} onChange={(e) => setEndereco(e.target.value)} />
           <select value={unidade} onChange={(e) => setUnidade(e.target.value)} className="h-12 w-full rounded-2xl border border-border bg-white px-4 text-text outline-none">
             <option>Unidade Sul</option><option>Unidade Centro</option><option>Unidade Norte</option>
