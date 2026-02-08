@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { Plus, Pencil, Trash2, X } from "lucide-react";
 import { Card } from "@/components/ui/card";
@@ -32,6 +33,17 @@ type Item = {
   detalhe: string;
   status: "ativo" | "inativo";
 };
+
+type PlanoApi = {
+  id: number;
+  nome: string;
+  valor: number;
+  recorrencia: string;
+  qtd_aulas_semanais: number;
+  status: "ativo" | "inativo";
+};
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
 
 const LABELS: Record<Entidade, string> = {
   usuarios: "Usuarios",
@@ -81,6 +93,7 @@ const seed: Record<Entidade, Item[]> = {
 };
 
 export default function ConfiguracoesPage() {
+  const qc = useQueryClient();
   const params = useSearchParams();
   const entidadeParam = params.get("entidade");
   const entidadesValidas: Entidade[] = [
@@ -159,7 +172,25 @@ Assinaturas:
 CONTRATANTE: ______________________
 CONTRATADA: ______________________`);
 
-  const items = useMemo(() => data[entidade] || [], [data, entidade]);
+  const { data: planosApi = [] } = useQuery<PlanoApi[]>({
+    queryKey: ["planos-config"],
+    queryFn: async () => {
+      const res = await fetch(`${API_URL}/planos`, { cache: "no-store" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: entidade === "plano",
+  });
+
+  const items = useMemo(() => {
+    if (entidade !== "plano") return data[entidade] || [];
+    return planosApi.map((p) => ({
+      id: p.id,
+      titulo: p.nome,
+      detalhe: `${Number(p.valor || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} | ${p.recorrencia.charAt(0).toUpperCase() + p.recorrencia.slice(1)} | ${p.qtd_aulas_semanais} aulas/sem`,
+      status: p.status,
+    }));
+  }, [data, entidade, planosApi]);
   const categoriasAtivas = useMemo(() => data.categoria.map((x) => x.titulo), [data]);
   const title = LABELS[entidade] || "Configuracoes";
 
@@ -190,10 +221,12 @@ CONTRATADA: ______________________`);
     setDetalhe(item.detalhe);
     setStatus(item.status);
     if (entidade === "plano") {
-      const parts = item.detalhe.split("|").map((x) => x.trim());
-      setPlanoValor(parts[0]?.replace("R$ ", "") || "");
-      setPlanoDuracao(parts[1] || "Mensal");
-      setPlanoAulas(parts[2]?.replace(" aulas/sem", "") || "");
+      const plano = planosApi.find((p) => p.id === item.id);
+      if (plano) {
+        setPlanoValor(String(plano.valor));
+        setPlanoDuracao(plano.recorrencia.charAt(0).toUpperCase() + plano.recorrencia.slice(1));
+        setPlanoAulas(String(plano.qtd_aulas_semanais));
+      }
     }
     if (entidade === "categoria") {
       setCategoriaTipo(item.detalhe === "Despesa" ? "Despesa" : "Receita");
@@ -208,13 +241,29 @@ CONTRATADA: ______________________`);
     setOpen(true);
   }
 
-  function salvar() {
+  async function salvar() {
+    if (entidade === "plano") {
+      const payload = {
+        nome: titulo,
+        valor: Number(String(planoValor).replace(",", ".")),
+        recorrencia: planoDuracao.toLowerCase(),
+        qtd_aulas_semanais: Number(planoAulas || 0),
+        status,
+      };
+      const url = editId ? `${API_URL}/planos/${editId}` : `${API_URL}/planos`;
+      const method = editId ? "PUT" : "POST";
+      const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      if (res.ok) {
+        qc.invalidateQueries({ queryKey: ["planos-config"] });
+        qc.invalidateQueries({ queryKey: ["planos-contrato"] });
+        setOpen(false);
+      }
+      return;
+    }
     setData((prev) => {
       const atual = [...prev[entidade]];
       const detalheFinal =
-        entidade === "plano"
-          ? `${planoValor} | ${planoDuracao} | ${planoAulas} aulas/sem`
-          : entidade === "categoria"
+        entidade === "categoria"
             ? categoriaTipo
             : entidade === "subcategoria"
               ? `Categoria: ${subcategoriaCategoria} | Tipo: ${tipoDaCategoria(subcategoriaCategoria)}`
@@ -233,7 +282,15 @@ CONTRATADA: ______________________`);
     setOpen(false);
   }
 
-  function apagar(id: number) {
+  async function apagar(id: number) {
+    if (entidade === "plano") {
+      const res = await fetch(`${API_URL}/planos/${id}`, { method: "DELETE" });
+      if (res.ok) {
+        qc.invalidateQueries({ queryKey: ["planos-config"] });
+        qc.invalidateQueries({ queryKey: ["planos-contrato"] });
+      }
+      return;
+    }
     setData((prev) => ({ ...prev, [entidade]: prev[entidade].filter((x) => x.id !== id) }));
   }
 

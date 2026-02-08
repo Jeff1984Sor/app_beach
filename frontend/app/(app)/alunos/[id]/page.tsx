@@ -50,11 +50,9 @@ async function fetchFicha(id: string) {
 }
 
 const tabs = ["Aulas", "Financeiro", "Contratos", "WhatsApp"];
-const planos = [
+type PlanoOption = { nome: string; valor: number; recorrencia: string; aulasSemanais: number };
+const planosFallback = [
   { nome: "Mensal Gold", valor: 380, recorrencia: "mensal", aulasSemanais: 3 },
-  { nome: "Trimestral Pro", valor: 340, recorrencia: "trimestral", aulasSemanais: 3 },
-  { nome: "Semestral Elite", valor: 320, recorrencia: "semestral", aulasSemanais: 3 },
-  { nome: "Anual Champion", valor: 300, recorrencia: "anual", aulasSemanais: 3 },
 ];
 const horasCheias = Array.from({ length: 15 }, (_, i) => `${String(i + 7).padStart(2, "0")}:00`);
 
@@ -72,7 +70,7 @@ export default function AlunoFichaPage() {
   const [endereco, setEndereco] = useState("");
   const [unidade, setUnidade] = useState("Unidade Sul");
   const [openContrato, setOpenContrato] = useState(false);
-  const [planoNome, setPlanoNome] = useState(planos[0].nome);
+  const [planoNome, setPlanoNome] = useState(planosFallback[0].nome);
   const [recorrencia, setRecorrencia] = useState("mensal");
   const [valor, setValor] = useState("380");
   const [qtdAulas, setQtdAulas] = useState("3");
@@ -82,6 +80,24 @@ export default function AlunoFichaPage() {
   const [horaAula, setHoraAula] = useState("18:00");
 
   const { data, isLoading } = useQuery({ queryKey: ["aluno-ficha", params.id], queryFn: () => fetchFicha(params.id) });
+  const { data: planosApi = [] } = useQuery<any[]>({
+    queryKey: ["planos-contrato"],
+    queryFn: async () => {
+      const res = await fetch(`${API_URL}/planos`, { cache: "no-store" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+  });
+  const planos = useMemo<PlanoOption[]>(
+    () =>
+      (planosApi.length ? planosApi : planosFallback).map((p: any) => ({
+        nome: p.nome,
+        valor: Number(p.valor || 0),
+        recorrencia: String(p.recorrencia || "mensal"),
+        aulasSemanais: Number(p.qtd_aulas_semanais ?? p.aulasSemanais ?? 0),
+      })),
+    [planosApi]
+  );
 
   useEffect(() => {
     const desiredTab = searchParams.get("tab");
@@ -97,6 +113,15 @@ export default function AlunoFichaPage() {
     const meses = recorrencia === "trimestral" ? 3 : recorrencia === "semestral" ? 6 : recorrencia === "anual" ? 12 : 1;
     setDataFimPreview(addMonths(dataInicio, meses));
   }, [dataInicio, recorrencia]);
+
+  useEffect(() => {
+    if (!planos.length) return;
+    const selected = planos.find((p) => p.nome === planoNome) || planos[0];
+    setPlanoNome(selected.nome);
+    setValor(String(selected.valor));
+    setRecorrencia(selected.recorrencia);
+    setQtdAulas(String(selected.aulasSemanais));
+  }, [planos]);
 
   const resumoFinanceiro = useMemo(() => {
     if (!data) return { aberto: "R$ 0", pago: "R$ 0", proximo: "--" };
