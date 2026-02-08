@@ -9,14 +9,16 @@ import { Section } from "@/components/ui/section";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
 const diasFixos = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sab", "Dom"];
+const horasCheias = Array.from({ length: 15 }, (_, i) => `${String(i + 7).padStart(2, "0")}:00`);
 
 export default function AgendaContratoPage() {
   const params = useParams<{ id: string }>();
   const search = useSearchParams();
   const router = useRouter();
   const contratoId = search.get("contratoId");
+  const horaQuery = search.get("hora");
   const [dias, setDias] = useState<string[]>(["Seg", "Qua", "Sex"]);
-  const [horaInicio, setHoraInicio] = useState("18:00");
+  const [horaInicio, setHoraInicio] = useState(horaQuery && horasCheias.includes(horaQuery) ? horaQuery : "18:00");
   const [duracao, setDuracao] = useState("60");
   const [unidade, setUnidade] = useState("Unidade Sul");
   const [erro, setErro] = useState("");
@@ -72,7 +74,11 @@ export default function AgendaContratoPage() {
             ))}
           </div>
           <div className="grid gap-3 sm:grid-cols-3">
-            <Input type="time" value={horaInicio} onChange={(e) => setHoraInicio(e.target.value)} />
+            <select value={horaInicio} onChange={(e) => setHoraInicio(e.target.value)} className="h-12 w-full rounded-2xl border border-border bg-white px-4 text-text outline-none">
+              {horasCheias.map((h) => (
+                <option key={h} value={h}>{h}</option>
+              ))}
+            </select>
             <Input type="number" min={30} step={30} placeholder="Duracao (min)" value={duracao} onChange={(e) => setDuracao(e.target.value)} />
             <select value={unidade} onChange={(e) => setUnidade(e.target.value)} className="h-12 w-full rounded-2xl border border-border bg-white px-4 text-text outline-none">
               <option>Unidade Sul</option>

@@ -56,6 +56,7 @@ const planos = [
   { nome: "Semestral Elite", valor: 320, recorrencia: "semestral", aulasSemanais: 3 },
   { nome: "Anual Champion", valor: 300, recorrencia: "anual", aulasSemanais: 3 },
 ];
+const horasCheias = Array.from({ length: 15 }, (_, i) => `${String(i + 7).padStart(2, "0")}:00`);
 
 export default function AlunoFichaPage() {
   const params = useParams<{ id: string }>();
@@ -78,6 +79,7 @@ export default function AlunoFichaPage() {
   const [dataInicio, setDataInicio] = useState(new Date().toISOString().slice(0, 10));
   const [diasSemana, setDiasSemana] = useState<string[]>(["Seg", "Qua", "Sex"]);
   const [dataFimPreview, setDataFimPreview] = useState("");
+  const [horaAula, setHoraAula] = useState("18:00");
 
   const { data, isLoading } = useQuery({ queryKey: ["aluno-ficha", params.id], queryFn: () => fetchFicha(params.id) });
 
@@ -159,7 +161,7 @@ export default function AlunoFichaPage() {
     setOpenContrato(false);
     qc.invalidateQueries({ queryKey: ["aluno-ficha", params.id] });
     if (body?.contrato_id) {
-      router.push(`/alunos/${data.id}/agenda-contrato?contratoId=${body.contrato_id}`);
+      router.push(`/alunos/${data.id}/agenda-contrato?contratoId=${body.contrato_id}&hora=${encodeURIComponent(horaAula)}`);
     }
   }
 
@@ -250,21 +252,29 @@ export default function AlunoFichaPage() {
 
       <Modal open={openContrato} onClose={() => setOpenContrato(false)} title="Novo contrato">
         <div className="space-y-3">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted">Plano</p>
           <select value={planoNome} onChange={(e) => selecionarPlano(e.target.value)} className="h-12 w-full rounded-2xl border border-border bg-white px-4 text-text outline-none">
             {planos.map((p) => (
               <option key={p.nome} value={p.nome}>{p.nome}</option>
             ))}
           </select>
-          <Input placeholder="Valor" value={valor} onChange={(e) => setValor(e.target.value)} />
-          <select value={recorrencia} onChange={(e) => setRecorrencia(e.target.value)} className="h-12 w-full rounded-2xl border border-border bg-white px-4 text-text outline-none">
-            <option value="mensal">Mensal</option>
-            <option value="trimestral">Trimestral</option>
-            <option value="semestral">Semestral</option>
-            <option value="anual">Anual</option>
-          </select>
-          <Input placeholder="Quantidade de aulas semanais" value={qtdAulas} onChange={(e) => setQtdAulas(e.target.value)} />
+
+          <p className="text-xs font-medium uppercase tracking-wide text-muted">Valor</p>
+          <Input value={Number(valor || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} readOnly />
+
+          <p className="text-xs font-medium uppercase tracking-wide text-muted">Recorrencia</p>
+          <Input value={recorrencia.charAt(0).toUpperCase() + recorrencia.slice(1)} readOnly />
+
+          <p className="text-xs font-medium uppercase tracking-wide text-muted">Numero de aulas por semana</p>
+          <Input value={qtdAulas} readOnly />
+
+          <p className="text-xs font-medium uppercase tracking-wide text-muted">Data de inicio</p>
           <Input type="date" value={dataInicio} onChange={(e) => setDataInicio(e.target.value)} />
-          <Input value={formatarDataBR(dataFimPreview)} readOnly placeholder="Data fim" />
+
+          <p className="text-xs font-medium uppercase tracking-wide text-muted">Data de encerramento</p>
+          <Input value={formatarDataBR(dataFimPreview)} readOnly />
+
+          <p className="text-xs font-medium uppercase tracking-wide text-muted">Dias da semana</p>
           <div className="flex flex-wrap gap-2">
             {["Seg", "Ter", "Qua", "Qui", "Sex", "Sab", "Dom"].map((d) => (
               <button key={d} onClick={() => toggleDia(d)} className={`rounded-xl px-3 py-2 text-sm ${diasSemana.includes(d) ? "bg-primary text-white" : "border border-border bg-white text-text"}`}>
@@ -272,6 +282,14 @@ export default function AlunoFichaPage() {
               </button>
             ))}
           </div>
+
+          <p className="text-xs font-medium uppercase tracking-wide text-muted">Horario</p>
+          <select value={horaAula} onChange={(e) => setHoraAula(e.target.value)} className="h-12 w-full rounded-2xl border border-border bg-white px-4 text-text outline-none">
+            {horasCheias.map((h) => (
+              <option key={h} value={h}>{h}</option>
+            ))}
+          </select>
+
           <Button className="w-full" onClick={criarContrato}>Salvar contrato e escolher dias na agenda</Button>
         </div>
       </Modal>
