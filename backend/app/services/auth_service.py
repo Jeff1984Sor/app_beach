@@ -2,13 +2,13 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from jose import jwt, JWTError
 from fastapi import HTTPException, status
-from app.core.config import settings
 from app.core.security import verify_password, create_token
+from app.core.config import settings
 from app.models.entities import Usuario
 
 
 async def login(db: AsyncSession, email: str, senha: str):
-    user = await db.scalar(select(Usuario).where(Usuario.email == email))
+    user = await db.scalar(select(Usuario).where(Usuario.email == email, Usuario.ativo == True))
     if not user or not verify_password(senha, user.senha_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Credenciais invalidas")
 
@@ -21,9 +21,7 @@ def decode_token(token: str, expected_type: str) -> int:
     try:
         payload = jwt.decode(token, settings.secret_key, algorithms=["HS256"])
         if payload.get("type") != expected_type:
-            raise HTTPException(status_code=401, detail="Token inválido")
+            raise HTTPException(status_code=401, detail="Token invalido")
         return int(payload["sub"])
     except JWTError as exc:
-        raise HTTPException(status_code=401, detail="Token inválido") from exc
-
-
+        raise HTTPException(status_code=401, detail="Token invalido") from exc

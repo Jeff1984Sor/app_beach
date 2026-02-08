@@ -8,11 +8,20 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useAuthStore, Role } from "@/store/auth";
 
-function detectRole(email: string): Role {
-  if (email.includes("prof")) return "professor";
-  if (email.includes("aluno")) return "aluno";
-  return "gestor";
-}
+type LoginResponse = {
+  access_token: string;
+  refresh_token: string;
+  token_type: string;
+};
+
+type MeResponse = {
+  id: number;
+  nome: string;
+  email: string;
+  role: Role;
+};
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8010/api/v1";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -27,11 +36,31 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
     try {
-      const role = detectRole(email);
-      setSession("mock-token", role, email.split("@")[0] || "Usuário");
+      const loginRes = await fetch(`${API_URL}/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, senha }),
+      });
+
+      if (!loginRes.ok) {
+        const body = await loginRes.json().catch(() => ({}));
+        throw new Error(body.detail || "Credenciais invalidas");
+      }
+
+      const loginData = (await loginRes.json()) as LoginResponse;
+
+      const meRes = await fetch(`${API_URL}/auth/me`, {
+        headers: { Authorization: `Bearer ${loginData.access_token}` },
+      });
+
+      if (!meRes.ok) throw new Error("Falha ao carregar perfil");
+      const me = (await meRes.json()) as MeResponse;
+
+      setSession(loginData.access_token, me.role, me.nome);
       router.push("/home");
-    } catch {
-      setError("Não foi possível entrar. Tente novamente.");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Nao foi possivel entrar. Tente novamente.";
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -61,4 +90,3 @@ export default function LoginPage() {
     </main>
   );
 }
-
