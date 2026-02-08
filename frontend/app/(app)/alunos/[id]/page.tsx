@@ -72,7 +72,7 @@ export default function AlunoFichaPage() {
   const [valor, setValor] = useState("380");
   const [qtdAulas, setQtdAulas] = useState("3");
   const [dataInicio, setDataInicio] = useState(new Date().toISOString().slice(0, 10));
-  const [diasSemana, setDiasSemana] = useState<string[]>(["Seg", "Qua", "Sex"]);
+  const [diasSemana, setDiasSemana] = useState<string[]>([]);
   const [dataFimPreview, setDataFimPreview] = useState("");
   const [horaAula, setHoraAula] = useState("18:00");
   const [editingContratoId, setEditingContratoId] = useState<number | null>(null);
@@ -122,13 +122,13 @@ export default function AlunoFichaPage() {
   }, [dataInicio, recorrencia]);
 
   useEffect(() => {
-    if (!planos.length) return;
-    const selected = planos.find((p) => p.nome === planoNome) || planos[0];
-    setPlanoNome(selected.nome);
+    if (!planos.length || !planoNome) return;
+    const selected = planos.find((p) => p.nome === planoNome);
+    if (!selected) return;
     setValor(String(selected.valor));
     setRecorrencia(selected.recorrencia);
     setQtdAulas(String(selected.aulasSemanais));
-  }, [planos]);
+  }, [planos, planoNome]);
 
   const resumoFinanceiro = useMemo(() => {
     if (!data) return { aberto: "R$ 0", pago: "R$ 0", proximo: "--" };
@@ -165,7 +165,11 @@ export default function AlunoFichaPage() {
     setDiasSemana((prev) => {
       if (prev.includes(dia)) return prev.filter((d) => d !== dia);
       const limite = Number(qtdAulas || 0);
-      if (limite > 0 && prev.length >= limite) {
+      if (limite <= 0) {
+        setMsgContrato("Selecione um plano antes de escolher os dias.");
+        return prev;
+      }
+      if (prev.length >= limite) {
         setMsgContrato(`Este plano permite no maximo ${limite} dia(s) por semana.`);
         return prev;
       }
@@ -306,7 +310,7 @@ export default function AlunoFichaPage() {
         <motion.div key={tab} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}>
           {tab === "Aulas" && <Section title="Aulas"><div className="space-y-3">{data.aulas.map((a: any) => <Card key={a.id} className="flex items-center justify-between p-4"><div><p className="font-semibold">{a.data} • {a.hora}</p><p className="text-sm text-muted">{a.unidade}</p></div><Badge tone={a.status === "confirmada" || a.status === "realizada" ? "success" : a.status === "pendente" ? "default" : "danger"}>{a.status}</Badge></Card>)}</div></Section>}
           {tab === "Financeiro" && <Section title="Financeiro"><div className="grid gap-3 sm:grid-cols-3"><Card><p className="text-sm text-muted">Total em aberto</p><p className="text-2xl font-semibold">{resumoFinanceiro.aberto}</p></Card><Card><p className="text-sm text-muted">Total pago</p><p className="text-2xl font-semibold">{resumoFinanceiro.pago}</p></Card><Card><p className="text-sm text-muted">Proximo vencimento</p><p className="text-2xl font-semibold">{resumoFinanceiro.proximo}</p></Card></div></Section>}
-          {tab === "Contratos" && <Section title="Contratos"><div className="mb-3"><Button onClick={() => { setEditingContratoId(null); setOpenContrato(true); }}>Novo contrato</Button></div><div className="space-y-3">{data.contratos.map((c: any) => <Card key={c.id} className="space-y-2 p-4"><div className="flex items-start justify-between gap-2"><div><p className="text-lg font-semibold">{c.plano}</p><p className="text-sm text-muted">Inicio: {c.inicio} • Fim: {c.fim}</p></div><div className="flex items-center gap-2"><button onClick={() => abrirEdicaoContrato(c)} className="rounded-xl border border-border p-2 text-muted hover:bg-bg"><Pencil size={14} /></button><button onClick={() => deletarContrato(c.id)} className="rounded-xl border border-border p-2 text-danger hover:bg-danger/10"><Trash2 size={14} /></button></div></div><div className="flex items-center justify-between"><Badge tone="success">{c.status}</Badge></div></Card>)}</div></Section>}
+          {tab === "Contratos" && <Section title="Contratos"><div className="mb-3"><Button onClick={() => { setEditingContratoId(null); setPlanoNome(""); setValor("0"); setRecorrencia(""); setQtdAulas("0"); setDiasSemana([]); setMsgContrato(""); setOpenContrato(true); }}>Novo contrato</Button></div><div className="space-y-3">{data.contratos.map((c: any) => <Card key={c.id} className="space-y-2 p-4"><div className="flex items-start justify-between gap-2"><div><p className="text-lg font-semibold">{c.plano}</p><p className="text-sm text-muted">Inicio: {c.inicio} • Fim: {c.fim}</p></div><div className="flex items-center gap-2"><button onClick={() => abrirEdicaoContrato(c)} className="rounded-xl border border-border p-2 text-muted hover:bg-bg"><Pencil size={14} /></button><button onClick={() => deletarContrato(c.id)} className="rounded-xl border border-border p-2 text-danger hover:bg-danger/10"><Trash2 size={14} /></button></div></div><div className="flex items-center justify-between"><Badge tone="success">{c.status}</Badge></div></Card>)}</div></Section>}
           {tab === "WhatsApp" && <Section title="WhatsApp"><div className="space-y-3">{data.mensagens.map((m: any) => <Card key={m.id} className="space-y-1 p-4"><p className="text-sm">{m.texto}</p><div className="flex items-center justify-between text-xs text-muted"><span>{m.quando}</span><span>{m.status}</span></div></Card>)}</div></Section>}
         </motion.div>
       </AnimatePresence>
