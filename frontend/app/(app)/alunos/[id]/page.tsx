@@ -65,7 +65,7 @@ export default function AlunoFichaPage() {
   const [aniversario, setAniversario] = useState("");
   const [cep, setCep] = useState("");
   const [endereco, setEndereco] = useState("");
-  const [unidade, setUnidade] = useState("");
+  const [unidadeId, setUnidadeId] = useState("");
   const [openContrato, setOpenContrato] = useState(false);
   const [planoNome, setPlanoNome] = useState("");
   const [recorrencia, setRecorrencia] = useState("");
@@ -214,7 +214,8 @@ export default function AlunoFichaPage() {
     setAniversario(data.data_aniversario || "");
     setCep(data.cep || "");
     setEndereco(data.endereco || "");
-    setUnidade(data.unidade || "");
+    const un = unidades.find((u) => u.nome === data.unidade);
+    setUnidadeId(un ? String(un.id) : "");
     setOpenEdit(true);
   }
 
@@ -223,7 +224,14 @@ export default function AlunoFichaPage() {
     await fetch(`${API_URL}/alunos/${data.id}/detalhes`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, telefone, data_aniversario: aniversario || null, cep: cep || null, endereco: endereco || null, unidade }),
+      body: JSON.stringify({
+        email,
+        telefone,
+        data_aniversario: aniversario || null,
+        cep: cep || null,
+        endereco: endereco || null,
+        unidade_id: unidadeId ? Number(unidadeId) : null,
+      }),
     });
     setOpenEdit(false);
     qc.invalidateQueries({ queryKey: ["aluno-ficha", params.id] });
@@ -617,10 +625,10 @@ export default function AlunoFichaPage() {
             onBlur={(e) => buscarCepEdicao(e.target.value)}
           />
           <Input placeholder="Endereco" value={endereco} onChange={(e) => setEndereco(e.target.value)} />
-          <select value={unidade} onChange={(e) => setUnidade(e.target.value)} className="h-12 w-full rounded-2xl border border-border bg-white px-4 text-text outline-none">
+          <select value={unidadeId} onChange={(e) => setUnidadeId(e.target.value)} className="h-12 w-full rounded-2xl border border-border bg-white px-4 text-text outline-none">
             <option value="">Selecione a unidade</option>
             {unidades.map((u) => (
-              <option key={u.id} value={u.nome}>{u.nome}</option>
+              <option key={u.id} value={u.id}>{u.nome}</option>
             ))}
           </select>
           <Button className="w-full" onClick={salvarEdicao}>Salvar alteracoes</Button>

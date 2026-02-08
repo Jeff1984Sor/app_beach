@@ -21,6 +21,7 @@ class AlunoCadastroIn(BaseModel):
     cep: str | None = None
     endereco: str | None = None
     unidade: str | None = None
+    unidade_id: int | None = None
     idade: int | None = None
     status: str = "ativo"
 

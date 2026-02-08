@@ -31,7 +31,7 @@ export default function NovoAlunoPage() {
   const [telefone, setTelefone] = useState("");
   const [email, setEmail] = useState("");
   const [aniversario, setAniversario] = useState("");
-  const [unidade, setUnidade] = useState("");
+  const [unidadeId, setUnidadeId] = useState("");
   const [cep, setCep] = useState("");
   const [logradouro, setLogradouro] = useState("");
   const [numero, setNumero] = useState("");
@@ -94,7 +94,7 @@ export default function NovoAlunoPage() {
         data_aniversario: aniversario || null,
         cep: cep || null,
         endereco: [logradouro, numero, bairro, cidade, uf].filter(Boolean).join(", ") || null,
-        unidade,
+        unidade_id: unidadeId ? Number(unidadeId) : null,
       }),
     });
     if (!res.ok) {
@@ -134,10 +134,10 @@ export default function NovoAlunoPage() {
               <Input placeholder="Idade (calculada)" value={idade} readOnly />
             </div>
 
-            <select value={unidade} onChange={(e) => setUnidade(e.target.value)} className="h-12 w-full rounded-2xl border border-border bg-white px-4 text-text outline-none" required>
+            <select value={unidadeId} onChange={(e) => setUnidadeId(e.target.value)} className="h-12 w-full rounded-2xl border border-border bg-white px-4 text-text outline-none" required>
               <option value="">Selecione a unidade</option>
               {unidades.map((u) => (
-                <option key={u.id} value={u.nome}>{u.nome}</option>
+                <option key={u.id} value={u.id}>{u.nome}</option>
               ))}
             </select>
 

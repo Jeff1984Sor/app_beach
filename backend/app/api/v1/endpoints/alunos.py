@@ -28,9 +28,25 @@ async def ensure_details_table(db: AsyncSession):
       cep VARCHAR(12),
       endereco VARCHAR(255),
       idade INTEGER,
-      unidade VARCHAR(120)
+      unidade VARCHAR(120),
+      unidade_id INTEGER
     )
     """))
+    await db.execute(
+        text(
+            """
+            DO $$
+            BEGIN
+              IF NOT EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'aluno_detalhes' AND column_name = 'unidade_id'
+              ) THEN
+                ALTER TABLE aluno_detalhes ADD COLUMN unidade_id INTEGER;
+              END IF;
+            END $$;
+            """
+        )
+    )
     await db.commit()
 
 
@@ -230,16 +246,29 @@ def dia_label_to_weekday(dia: str) -> int | None:
 
 
 async def get_details(db: AsyncSession, aluno_id: int) -> dict:
-    row = (await db.execute(text("SELECT email_contato, data_aniversario, cep, endereco, idade, unidade FROM aluno_detalhes WHERE aluno_id = :id"), {"id": aluno_id})).first()
+    row = (
+        await db.execute(
+            text("SELECT email_contato, data_aniversario, cep, endereco, idade, unidade, unidade_id FROM aluno_detalhes WHERE aluno_id = :id"),
+            {"id": aluno_id},
+        )
+    ).first()
     if not row:
-        return {"email_contato": None, "data_aniversario": None, "cep": None, "endereco": None, "idade": None, "unidade": None}
+        return {"email_contato": None, "data_aniversario": None, "cep": None, "endereco": None, "idade": None, "unidade": None, "unidade_id": None}
+
+    unidade_nome = row[5]
+    unidade_id = row[6]
+    if (not unidade_nome) and unidade_id:
+        un = (await db.execute(text("SELECT nome FROM unidades WHERE id = :id"), {"id": int(unidade_id)})).first()
+        if un and un[0]:
+            unidade_nome = un[0]
     return {
         "email_contato": row[0],
         "data_aniversario": row[1],
         "cep": row[2],
         "endereco": row[3],
         "idade": row[4],
-        "unidade": row[5],
+        "unidade": unidade_nome,
+        "unidade_id": unidade_id,
     }
 
 
@@ -347,17 +376,25 @@ async def update_detalhes(aluno_id: int, payload: dict, db: AsyncSession = Depen
     if not exists:
         raise HTTPException(status_code=404, detail="Aluno nao encontrado")
 
+    unidade_id = payload.get("unidade_id")
+    unidade_nome = payload.get("unidade")
+    if unidade_id and not unidade_nome:
+        un = (await db.execute(text("SELECT nome FROM unidades WHERE id = :id"), {"id": int(unidade_id)})).first()
+        if un and un[0]:
+            unidade_nome = un[0]
+
     await db.execute(
         text("""
-        INSERT INTO aluno_detalhes (aluno_id, email_contato, data_aniversario, cep, endereco, idade, unidade)
-        VALUES (:aluno_id, :email_contato, :data_aniversario, :cep, :endereco, :idade, :unidade)
+        INSERT INTO aluno_detalhes (aluno_id, email_contato, data_aniversario, cep, endereco, idade, unidade, unidade_id)
+        VALUES (:aluno_id, :email_contato, :data_aniversario, :cep, :endereco, :idade, :unidade, :unidade_id)
         ON CONFLICT(aluno_id) DO UPDATE SET
           email_contato = excluded.email_contato,
           data_aniversario = excluded.data_aniversario,
           cep = excluded.cep,
           endereco = excluded.endereco,
           idade = excluded.idade,
-          unidade = excluded.unidade
+          unidade = excluded.unidade,
+          unidade_id = excluded.unidade_id
         """),
         {
             "aluno_id": aluno_id,
@@ -366,7 +403,8 @@ async def update_detalhes(aluno_id: int, payload: dict, db: AsyncSession = Depen
             "cep": payload.get("cep"),
             "endereco": payload.get("endereco"),
             "idade": payload.get("idade"),
-            "unidade": payload.get("unidade"),
+            "unidade": unidade_nome,
+            "unidade_id": unidade_id,
         },
     )
 
@@ -982,8 +1020,15 @@ async def cadastro_aluno(
     await db.commit()
     await db.refresh(aluno)
 
+    unidade_id = payload.unidade_id
+    unidade_nome = payload.unidade
+    if unidade_id and not unidade_nome:
+        un = (await db.execute(text("SELECT nome FROM unidades WHERE id = :id"), {"id": int(unidade_id)})).first()
+        if un and un[0]:
+            unidade_nome = un[0]
+
     await db.execute(
-        text("INSERT INTO aluno_detalhes (aluno_id, email_contato, data_aniversario, cep, endereco, idade, unidade) VALUES (:aluno_id, :email, :data, :cep, :endereco, :idade, :unidade)"),
+        text("INSERT INTO aluno_detalhes (aluno_id, email_contato, data_aniversario, cep, endereco, idade, unidade, unidade_id) VALUES (:aluno_id, :email, :data, :cep, :endereco, :idade, :unidade, :unidade_id)"),
         {
             "aluno_id": aluno.id,
             "email": payload.email,
@@ -991,7 +1036,8 @@ async def cadastro_aluno(
             "cep": payload.cep,
             "endereco": payload.endereco,
             "idade": payload.idade,
-            "unidade": payload.unidade,
+            "unidade": unidade_nome,
+            "unidade_id": unidade_id,
         },
     )
     await db.commit()
