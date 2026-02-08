@@ -52,6 +52,13 @@ export default function AlunoFichaPage() {
   const [cep, setCep] = useState("");
   const [endereco, setEndereco] = useState("");
   const [unidade, setUnidade] = useState("Unidade Sul");
+  const [openContrato, setOpenContrato] = useState(false);
+  const [planoNome, setPlanoNome] = useState("Plano Mensal");
+  const [recorrencia, setRecorrencia] = useState("mensal");
+  const [valor, setValor] = useState("380");
+  const [qtdAulas, setQtdAulas] = useState("3");
+  const [dataInicio, setDataInicio] = useState(new Date().toISOString().slice(0, 10));
+  const [diasSemana, setDiasSemana] = useState<string[]>(["Seg", "Qua", "Sex"]);
 
   const { data, isLoading } = useQuery({ queryKey: ["aluno-ficha", params.id], queryFn: () => fetchFicha(params.id) });
 
@@ -84,6 +91,28 @@ export default function AlunoFichaPage() {
     setOpenEdit(false);
     qc.invalidateQueries({ queryKey: ["aluno-ficha", params.id] });
     qc.invalidateQueries({ queryKey: ["alunos-lista"] });
+  }
+
+  function toggleDia(dia: string) {
+    setDiasSemana((prev) => prev.includes(dia) ? prev.filter((d) => d !== dia) : [...prev, dia]);
+  }
+
+  async function criarContrato() {
+    if (!data) return;
+    await fetch(`${API_URL}/alunos/${data.id}/contratos`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        plano_nome: planoNome,
+        recorrencia,
+        valor: Number(valor || 0),
+        qtd_aulas_semanais: Number(qtdAulas || 0),
+        data_inicio: dataInicio,
+        dias_semana: diasSemana,
+      }),
+    });
+    setOpenContrato(false);
+    qc.invalidateQueries({ queryKey: ["aluno-ficha", params.id] });
   }
 
   async function buscarCepEdicao(cepValue: string) {
@@ -134,7 +163,7 @@ export default function AlunoFichaPage() {
         <motion.div key={tab} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}>
           {tab === "Aulas" && <Section title="Aulas"><div className="space-y-3">{data.aulas.map((a: any) => <Card key={a.id} className="flex items-center justify-between p-4"><div><p className="font-semibold">{a.data} • {a.hora}</p><p className="text-sm text-muted">{a.unidade}</p></div><Badge tone={a.status === "confirmada" || a.status === "realizada" ? "success" : a.status === "pendente" ? "default" : "danger"}>{a.status}</Badge></Card>)}</div></Section>}
           {tab === "Financeiro" && <Section title="Financeiro"><div className="grid gap-3 sm:grid-cols-3"><Card><p className="text-sm text-muted">Total em aberto</p><p className="text-2xl font-semibold">{resumoFinanceiro.aberto}</p></Card><Card><p className="text-sm text-muted">Total pago</p><p className="text-2xl font-semibold">{resumoFinanceiro.pago}</p></Card><Card><p className="text-sm text-muted">Proximo vencimento</p><p className="text-2xl font-semibold">{resumoFinanceiro.proximo}</p></Card></div></Section>}
-          {tab === "Contratos" && <Section title="Contratos"><div className="space-y-3">{data.contratos.map((c: any) => <Card key={c.id} className="space-y-2 p-4"><p className="text-lg font-semibold">{c.plano}</p><p className="text-sm text-muted">Inicio: {c.inicio} • Fim: {c.fim}</p><div className="flex items-center justify-between"><Badge tone="success">{c.status}</Badge></div></Card>)}</div></Section>}
+          {tab === "Contratos" && <Section title="Contratos"><div className="mb-3"><Button onClick={() => setOpenContrato(true)}>Novo contrato</Button></div><div className="space-y-3">{data.contratos.map((c: any) => <Card key={c.id} className="space-y-2 p-4"><p className="text-lg font-semibold">{c.plano}</p><p className="text-sm text-muted">Inicio: {c.inicio} • Fim: {c.fim}</p><div className="flex items-center justify-between"><Badge tone="success">{c.status}</Badge></div></Card>)}</div></Section>}
           {tab === "WhatsApp" && <Section title="WhatsApp"><div className="space-y-3">{data.mensagens.map((m: any) => <Card key={m.id} className="space-y-1 p-4"><p className="text-sm">{m.texto}</p><div className="flex items-center justify-between text-xs text-muted"><span>{m.quando}</span><span>{m.status}</span></div></Card>)}</div></Section>}
         </motion.div>
       </AnimatePresence>
@@ -162,6 +191,29 @@ export default function AlunoFichaPage() {
             <option>Unidade Sul</option><option>Unidade Centro</option><option>Unidade Norte</option>
           </select>
           <Button className="w-full" onClick={salvarEdicao}>Salvar alteracoes</Button>
+        </div>
+      </Modal>
+
+      <Modal open={openContrato} onClose={() => setOpenContrato(false)} title="Novo contrato">
+        <div className="space-y-3">
+          <Input placeholder="Plano" value={planoNome} onChange={(e) => setPlanoNome(e.target.value)} />
+          <Input placeholder="Valor" value={valor} onChange={(e) => setValor(e.target.value)} />
+          <select value={recorrencia} onChange={(e) => setRecorrencia(e.target.value)} className="h-12 w-full rounded-2xl border border-border bg-white px-4 text-text outline-none">
+            <option value="mensal">Mensal</option>
+            <option value="trimestral">Trimestral</option>
+            <option value="semestral">Semestral</option>
+            <option value="anual">Anual</option>
+          </select>
+          <Input placeholder="Quantidade de aulas semanais" value={qtdAulas} onChange={(e) => setQtdAulas(e.target.value)} />
+          <Input type="date" value={dataInicio} onChange={(e) => setDataInicio(e.target.value)} />
+          <div className="flex flex-wrap gap-2">
+            {["Seg", "Ter", "Qua", "Qui", "Sex", "Sab", "Dom"].map((d) => (
+              <button key={d} onClick={() => toggleDia(d)} className={`rounded-xl px-3 py-2 text-sm ${diasSemana.includes(d) ? "bg-primary text-white" : "border border-border bg-white text-text"}`}>
+                {d}
+              </button>
+            ))}
+          </div>
+          <Button className="w-full" onClick={criarContrato}>Criar contrato e gerar contas a receber</Button>
         </div>
       </Modal>
     </main>

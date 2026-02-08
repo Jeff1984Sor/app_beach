@@ -1,4 +1,5 @@
-﻿from datetime import date
+﻿from datetime import date, datetime
+import calendar
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, text
@@ -31,6 +32,37 @@ async def ensure_details_table(db: AsyncSession):
     )
     """))
     await db.commit()
+
+
+async def ensure_contracts_table(db: AsyncSession):
+    await db.execute(text("""
+    CREATE TABLE IF NOT EXISTS aluno_contratos (
+      id SERIAL PRIMARY KEY,
+      aluno_id INTEGER NOT NULL,
+      plano_nome VARCHAR(120) NOT NULL,
+      recorrencia VARCHAR(20) NOT NULL,
+      valor NUMERIC(10,2) NOT NULL,
+      qtd_aulas_semanais INTEGER DEFAULT 0,
+      data_inicio DATE NOT NULL,
+      data_fim DATE NOT NULL,
+      dias_semana VARCHAR(120),
+      status VARCHAR(20) DEFAULT 'ativo'
+    )
+    """))
+    await db.commit()
+
+
+def add_months(base: date, months: int) -> date:
+    month = base.month - 1 + months
+    year = base.year + month // 12
+    month = month % 12 + 1
+    day = min(base.day, calendar.monthrange(year, month)[1])
+    return date(year, month, day)
+
+
+def recorrencia_to_meses(recorrencia: str) -> int:
+    mapa = {"mensal": 1, "trimestral": 3, "semestral": 6, "anual": 12}
+    return mapa.get((recorrencia or "").lower(), 1)
 
 
 async def get_details(db: AsyncSession, aluno_id: int) -> dict:
@@ -69,6 +101,7 @@ async def list_alunos(db: AsyncSession = Depends(get_db)):
 @router.get("/{aluno_id}/ficha")
 async def ficha_aluno(aluno_id: int, db: AsyncSession = Depends(get_db)):
     await ensure_details_table(db)
+    await ensure_contracts_table(db)
     row = (await db.execute(select(Aluno, Usuario).join(Usuario, Usuario.id == Aluno.usuario_id).where(Aluno.id == aluno_id))).first()
     if not row:
         raise HTTPException(status_code=404, detail="Aluno nao encontrado")
@@ -77,6 +110,7 @@ async def ficha_aluno(aluno_id: int, db: AsyncSession = Depends(get_db)):
     d = await get_details(db, aluno.id)
     aulas = (await db.execute(select(Aula).where(Aula.aluno_id == aluno_id).order_by(Aula.inicio.desc()).limit(20))).scalars().all()
     financeiro = (await db.execute(select(ContaReceber).where(ContaReceber.aluno_id == aluno_id).order_by(ContaReceber.vencimento.desc()).limit(20))).scalars().all()
+    contratos_rows = (await db.execute(text("SELECT id, plano_nome, data_inicio, data_fim, status FROM aluno_contratos WHERE aluno_id = :id ORDER BY id DESC"), {"id": aluno_id})).all()
 
     return {
         "id": aluno.id,
@@ -109,7 +143,16 @@ async def ficha_aluno(aluno_id: int, db: AsyncSession = Depends(get_db)):
             }
             for f in financeiro
         ],
-        "contratos": [{"id": 1, "plano": "Plano Mensal", "inicio": date.today().strftime("%d/%m/%Y"), "fim": date.today().strftime("%d/%m/%Y"), "status": "Ativo"}],
+        "contratos": [
+            {
+                "id": c[0],
+                "plano": c[1],
+                "inicio": c[2].strftime("%d/%m/%Y") if c[2] else "--",
+                "fim": c[3].strftime("%d/%m/%Y") if c[3] else "--",
+                "status": c[4] or "ativo",
+            }
+            for c in contratos_rows
+        ],
         "mensagens": [{"id": 1, "texto": "Bem-vindo ao Beach SaaS", "status": "entregue", "quando": "Hoje"}],
     }
 
@@ -171,6 +214,56 @@ async def gerar_contrato(aluno_id: int, payload: dict, db: AsyncSession = Depend
     }
     conteudo = render_template(template, variables)
     return {"aluno_id": aluno_id, "conteudo": conteudo, "variables": variables}
+
+
+@router.post("/{aluno_id}/contratos")
+async def criar_contrato(aluno_id: int, payload: dict, db: AsyncSession = Depends(get_db)):
+    await ensure_contracts_table(db)
+    row = await db.get(Aluno, aluno_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Aluno nao encontrado")
+
+    plano_nome = payload.get("plano_nome") or "Plano Mensal"
+    recorrencia = (payload.get("recorrencia") or "mensal").lower()
+    valor = float(payload.get("valor") or 0)
+    qtd_aulas_semanais = int(payload.get("qtd_aulas_semanais") or 0)
+    dias_semana = ",".join(payload.get("dias_semana") or [])
+
+    data_inicio_raw = payload.get("data_inicio")
+    data_inicio = datetime.strptime(data_inicio_raw, "%Y-%m-%d").date() if data_inicio_raw else date.today()
+    meses = recorrencia_to_meses(recorrencia)
+    data_fim = add_months(data_inicio, meses)
+
+    contrato_row = (
+        await db.execute(
+            text("""
+            INSERT INTO aluno_contratos (aluno_id, plano_nome, recorrencia, valor, qtd_aulas_semanais, data_inicio, data_fim, dias_semana, status)
+            VALUES (:aluno_id, :plano_nome, :recorrencia, :valor, :qtd_aulas_semanais, :data_inicio, :data_fim, :dias_semana, 'ativo')
+            RETURNING id
+            """),
+            {
+                "aluno_id": aluno_id,
+                "plano_nome": plano_nome,
+                "recorrencia": recorrencia,
+                "valor": valor,
+                "qtd_aulas_semanais": qtd_aulas_semanais,
+                "data_inicio": data_inicio,
+                "data_fim": data_fim,
+                "dias_semana": dias_semana,
+            },
+        )
+    ).first()
+    contrato_id = contrato_row[0]
+
+    criadas = []
+    for i in range(meses):
+        venc = add_months(data_inicio, i)
+        conta = ContaReceber(aluno_id=aluno_id, vencimento=venc, valor=valor, status="aberto")
+        db.add(conta)
+        criadas.append(venc.strftime("%d/%m/%Y"))
+
+    await db.commit()
+    return {"ok": True, "contrato_id": contrato_id, "contas_receber_criadas": len(criadas), "vencimentos": criadas}
 
 
 @router.post("")
@@ -237,6 +330,7 @@ async def delete_aluno(aluno_id: int, db: AsyncSession = Depends(get_db)):
     if not row:
         raise HTTPException(status_code=404, detail="Aluno nao encontrado")
     await db.execute(text("DELETE FROM aluno_detalhes WHERE aluno_id = :id"), {"id": aluno_id})
+    await db.execute(text("DELETE FROM aluno_contratos WHERE aluno_id = :id"), {"id": aluno_id})
     await db.delete(row)
     await db.commit()
     return {"ok": True}
