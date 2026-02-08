@@ -22,6 +22,7 @@ type Entidade =
   | "plano"
   | "categoria"
   | "subcategoria"
+  | "modelo_contrato"
   | "media_files"
   | "empresa_config";
 
@@ -45,6 +46,7 @@ const LABELS: Record<Entidade, string> = {
   plano: "Plano",
   categoria: "Categoria",
   subcategoria: "Subcategoria",
+  modelo_contrato: "Modelo de Contrato",
   media_files: "Media Files",
   empresa_config: "Empresa Config",
 };
@@ -68,6 +70,12 @@ const seed: Record<Entidade, Item[]> = {
   plano: [{ id: 1, titulo: "Mensal Gold", detalhe: "R$ 380 | 30 dias | 3 aulas/sem", status: "ativo" }],
   categoria: [{ id: 1, titulo: "Mensalidades", detalhe: "Receita", status: "ativo" }],
   subcategoria: [{ id: 1, titulo: "Plano Gold", detalhe: "Categoria: Mensalidades | Tipo: Receita", status: "ativo" }],
+  modelo_contrato: [{
+    id: 1,
+    titulo: "Contrato Padrao Beach Tennis",
+    detalhe: "Modelo base com variaveis do sistema",
+    status: "ativo"
+  }],
   media_files: [{ id: 1, titulo: "Logo Oficial", detalhe: "image/png", status: "ativo" }],
   empresa_config: [{ id: 1, titulo: "Beach Club", detalhe: "Cor primaria #0A84FF", status: "ativo" }],
 };
@@ -88,6 +96,7 @@ export default function ConfiguracoesPage() {
     "plano",
     "categoria",
     "subcategoria",
+    "modelo_contrato",
     "media_files",
     "empresa_config",
   ];
@@ -104,6 +113,51 @@ export default function ConfiguracoesPage() {
   const [planoAulas, setPlanoAulas] = useState("");
   const [categoriaTipo, setCategoriaTipo] = useState<"Receita" | "Despesa">("Receita");
   const [subcategoriaCategoria, setSubcategoriaCategoria] = useState("");
+  const [contratoTexto, setContratoTexto] = useState(`CONTRATO DE PRESTACAO DE SERVICOS - BEACH TENNIS
+
+CONTRATANTE:
+Nome: {{aluno_nome}}
+Data de nascimento: {{aluno_data_nascimento}}
+Endereco: {{aluno_endereco}}
+Bairro: {{aluno_bairro}} - CEP: {{aluno_cep}}
+Telefone: {{aluno_telefone}}
+Responsavel (se menor): {{responsavel_nome}}
+CPF: {{responsavel_cpf}}
+
+CONTRATADA:
+Razao social: {{empresa_razao_social}}
+CNPJ: {{empresa_cnpj}}
+Endereco: {{empresa_endereco}}
+Unidade: {{unidade_nome}}
+
+PLANO CONTRATADO:
+Plano: {{plano_nome}}
+Valor: {{plano_valor}}
+Duracao: {{plano_duracao}}
+Quantidade de aulas semanais: {{plano_qtd_aulas_semanais}}
+Dias da semana: {{aula_dias_semana}}
+Horario: {{aula_horario}}
+Professor: {{professor_nome}}
+
+FINANCEIRO:
+Vencimento: {{financeiro_vencimento}}
+Forma de pagamento: {{financeiro_forma_pagamento}}
+Multa por atraso: {{financeiro_multa}}
+Juros: {{financeiro_juros}}
+
+CLAUSULAS:
+1. O aluno participara das aulas de Beach Tennis conforme plano contratado.
+2. O contrato tem vigencia conforme duracao do plano, renovavel por acordo entre as partes.
+3. Faltas do aluno nao geram desconto automatico, salvo previsao expressa.
+4. Reposicoes por chuva/indisponibilidade operacional seguirao as regras internas da escola.
+5. O nao pagamento podera implicar suspensao de acesso ate regularizacao.
+6. O foro eleito para dirimir conflitos e o da comarca de {{empresa_cidade}}/{{empresa_uf}}.
+
+Local e data: {{empresa_cidade}}, {{data_hoje}}
+
+Assinaturas:
+CONTRATANTE: ______________________
+CONTRATADA: ______________________`);
 
   const items = useMemo(() => data[entidade] || [], [data, entidade]);
   const categoriasAtivas = useMemo(() => data.categoria.map((x) => x.titulo), [data]);
@@ -124,6 +178,9 @@ export default function ConfiguracoesPage() {
     setPlanoAulas("");
     setCategoriaTipo("Receita");
     setSubcategoriaCategoria(categoriasAtivas[0] || "");
+    if (entidade === "modelo_contrato") {
+      setContratoTexto(contratoTexto);
+    }
     setOpen(true);
   }
 
@@ -145,6 +202,9 @@ export default function ConfiguracoesPage() {
       const cat = item.detalhe.match(/Categoria:\s*([^|]+)/)?.[1]?.trim() || "";
       setSubcategoriaCategoria(cat);
     }
+    if (entidade === "modelo_contrato") {
+      setContratoTexto(item.detalhe);
+    }
     setOpen(true);
   }
 
@@ -158,6 +218,8 @@ export default function ConfiguracoesPage() {
             ? categoriaTipo
             : entidade === "subcategoria"
               ? `Categoria: ${subcategoriaCategoria} | Tipo: ${tipoDaCategoria(subcategoriaCategoria)}`
+          : entidade === "modelo_contrato"
+              ? contratoTexto
           : detalhe;
       if (editId) {
         const idx = atual.findIndex((x) => x.id === editId);
@@ -272,6 +334,20 @@ export default function ConfiguracoesPage() {
                     </div>
                     <div className="rounded-2xl border border-border bg-bg px-4 py-3 text-sm text-muted">
                       Tipo puxado da categoria: <span className="font-semibold text-text">{tipoDaCategoria(subcategoriaCategoria)}</span>
+                    </div>
+                  </>
+                ) : entidade === "modelo_contrato" ? (
+                  <>
+                    <div className="space-y-1">
+                      <p className="text-xs font-medium uppercase tracking-wide text-muted">Modelo de contrato</p>
+                      <textarea
+                        value={contratoTexto}
+                        onChange={(e) => setContratoTexto(e.target.value)}
+                        className="min-h-64 w-full rounded-2xl border border-border bg-white px-4 py-3 text-sm text-text outline-none"
+                      />
+                    </div>
+                    <div className="rounded-2xl border border-border bg-bg px-4 py-3 text-xs text-muted">
+                      Variaveis disponiveis: {"{{aluno_nome}} {{plano_nome}} {{plano_valor}} {{plano_duracao}} {{plano_qtd_aulas_semanais}} {{professor_nome}} {{empresa_razao_social}} {{empresa_cnpj}} {{empresa_endereco}} {{empresa_cidade}} {{empresa_uf}} {{data_hoje}}"}
                     </div>
                   </>
                 ) : (
