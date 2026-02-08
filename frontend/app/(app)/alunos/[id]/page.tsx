@@ -79,6 +79,7 @@ export default function AlunoFichaPage() {
   const [dataFimPreview, setDataFimPreview] = useState("");
   const [horaAula, setHoraAula] = useState("18:00");
   const [editingContratoId, setEditingContratoId] = useState<number | null>(null);
+  const [msgContrato, setMsgContrato] = useState<string>("");
 
   const { data, isLoading } = useQuery({ queryKey: ["aluno-ficha", params.id], queryFn: () => fetchFicha(params.id) });
   const { data: planosApi = [] } = useQuery<any[]>({
@@ -170,6 +171,7 @@ export default function AlunoFichaPage() {
 
   async function criarContrato() {
     if (!data) return;
+    setMsgContrato("");
     const url = editingContratoId
       ? `${API_URL}/alunos/${data.id}/contratos/${editingContratoId}`
       : `${API_URL}/alunos/${data.id}/contratos`;
@@ -188,12 +190,32 @@ export default function AlunoFichaPage() {
     });
     if (!res.ok) return;
     const body = await res.json().catch(() => ({}));
+    let contratoIdReserva = editingContratoId || body?.contrato_id;
+    if (contratoIdReserva) {
+      const reservaRes = await fetch(`${API_URL}/alunos/${data.id}/contratos/${contratoIdReserva}/reservas`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          dias_semana: diasSemana,
+          hora_inicio: horaAula,
+          duracao_minutos: 60,
+          unidade: data.unidade,
+        }),
+      });
+      if (!reservaRes.ok) {
+        const erro = await reservaRes.json().catch(() => ({}));
+        setMsgContrato(erro.detail || "Contrato salvo, mas falhou ao reservar aulas.");
+      }
+    }
+
     setOpenContrato(false);
     setEditingContratoId(null);
     qc.invalidateQueries({ queryKey: ["aluno-ficha", params.id] });
     if (!editingContratoId && body?.contrato_id) {
       router.push(`/alunos/${data.id}/agenda-contrato?contratoId=${body.contrato_id}&hora=${encodeURIComponent(horaAula)}`);
+      return;
     }
+    setTab("Aulas");
   }
 
   function abrirEdicaoContrato(c: any) {
@@ -337,6 +359,7 @@ export default function AlunoFichaPage() {
             ))}
           </select>
 
+          {msgContrato && <p className="text-sm text-danger">{msgContrato}</p>}
           <Button className="w-full" onClick={criarContrato}>{editingContratoId ? "Salvar alteracoes do contrato" : "Salvar contrato e escolher dias na agenda"}</Button>
         </div>
       </Modal>
