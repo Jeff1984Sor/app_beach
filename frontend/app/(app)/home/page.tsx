@@ -29,21 +29,21 @@ const mapRole: Record<string, Kpi[]> = {
 };
 
 const tabelas = [
-  { nome: "Usuarios", entidade: "usuarios" },
-  { nome: "Alunos", entidade: "alunos" },
-  { nome: "Unidades", entidade: "unidades" },
-  { nome: "Agenda", entidade: "agenda" },
-  { nome: "Aulas", entidade: "aulas" },
-  { nome: "Contas Receber", entidade: "contas_receber" },
-  { nome: "Contas Pagar", entidade: "contas_pagar" },
-  { nome: "Movimentos Bancarios", entidade: "movimentos_bancarios" },
-  { nome: "Regras Comissao", entidade: "regras_comissao" },
-  { nome: "Plano", entidade: "plano" },
-  { nome: "Categoria", entidade: "categoria" },
-  { nome: "Subcategoria", entidade: "subcategoria" },
-  { nome: "Modelo de Contrato", entidade: "modelo_contrato" },
-  { nome: "Media Files", entidade: "media_files" },
-  { nome: "Empresa Config", entidade: "empresa_config" }
+  { nome: "Usuarios", href: "/usuarios" },
+  { nome: "Alunos", href: "/alunos" },
+  { nome: "Unidades", href: "/configuracoes?entidade=unidades" },
+  { nome: "Agenda", href: "/agenda" },
+  { nome: "Aulas", href: "/configuracoes?entidade=aulas" },
+  { nome: "Contas Receber", href: "/configuracoes?entidade=contas_receber" },
+  { nome: "Contas Pagar", href: "/configuracoes?entidade=contas_pagar" },
+  { nome: "Movimentos Bancarios", href: "/configuracoes?entidade=movimentos_bancarios" },
+  { nome: "Regras Comissao", href: "/configuracoes?entidade=regras_comissao" },
+  { nome: "Plano", href: "/configuracoes?entidade=plano" },
+  { nome: "Categoria", href: "/configuracoes?entidade=categoria" },
+  { nome: "Subcategoria", href: "/configuracoes?entidade=subcategoria" },
+  { nome: "Modelo de Contrato", href: "/configuracoes?entidade=modelo_contrato" },
+  { nome: "Media Files", href: "/configuracoes?entidade=media_files" },
+  { nome: "Empresa Config", href: "/configuracoes?entidade=empresa_config" }
 ];
 
 export default function HomePage() {
@@ -61,7 +61,7 @@ export default function HomePage() {
           </summary>
           <div className="absolute right-0 z-20 mt-2 max-h-80 w-56 overflow-auto rounded-2xl border border-border bg-white p-2 shadow-soft">
             {tabelas.map((item) => (
-              <Link key={item.entidade} href={`/configuracoes?entidade=${item.entidade}`} className="block rounded-xl px-3 py-2 text-sm text-text hover:bg-bg">
+              <Link key={item.nome} href={item.href} className="block rounded-xl px-3 py-2 text-sm text-text hover:bg-bg">
                 {item.nome}
               </Link>
             ))}
