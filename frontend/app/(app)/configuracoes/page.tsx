@@ -111,37 +111,6 @@ const LABELS: Record<Entidade, string> = {
   empresa_config: "Empresa Config",
 };
 
-const seed: Record<Entidade, Item[]> = {
-  usuarios: [
-    { id: 1, titulo: "Gestor Master", detalhe: "login: gestor", status: "ativo" },
-    { id: 2, titulo: "Professor Demo", detalhe: "login: professor", status: "ativo" },
-  ],
-  alunos: [
-    { id: 1, titulo: "Ana Costa", detalhe: "Plano Intermediario", status: "ativo" },
-    { id: 2, titulo: "Jeff Santos", detalhe: "Plano Mensal", status: "ativo" },
-  ],
-  unidades: [{ id: 1, titulo: "Unidade Sul", detalhe: "Sao Paulo", status: "ativo" }],
-  agenda: [{ id: 1, titulo: "Agenda Principal", detalhe: "Seg a Sab", status: "ativo" }],
-  aulas: [{ id: 1, titulo: "Aula Funcional", detalhe: "08:00", status: "ativo" }],
-  contas_receber: [{ id: 1, titulo: "Mensalidade Ana", detalhe: "R$ 380", status: "ativo" }],
-  contas_pagar: [{ id: 1, titulo: "Aluguel Quadra", detalhe: "R$ 2.000", status: "ativo" }],
-  movimentos_bancarios: [{ id: 1, titulo: "PIX recebido", detalhe: "R$ 550", status: "ativo" }],
-  regras_comissao: [{ id: 1, titulo: "Professor", detalhe: "12%", status: "ativo" }],
-  plano: [{ id: 1, titulo: "Mensal Gold", detalhe: "R$ 380 | 30 dias | 3 aulas/sem", status: "ativo" }],
-  conta_bancaria: [],
-  movimentacoes_financeiras: [],
-  categoria: [{ id: 1, titulo: "Mensalidades", detalhe: "Receita", status: "ativo" }],
-  subcategoria: [{ id: 1, titulo: "Plano Gold", detalhe: "Categoria: Mensalidades | Tipo: Receita", status: "ativo" }],
-  modelo_contrato: [{
-    id: 1,
-    titulo: "Contrato Padrao Beach Tennis",
-    detalhe: "Modelo base com variaveis do sistema",
-    status: "ativo"
-  }],
-  media_files: [{ id: 1, titulo: "Logo Oficial", detalhe: "image/png", status: "ativo" }],
-  empresa_config: [{ id: 1, titulo: "Beach Club", detalhe: "Cor primaria #0A84FF", status: "ativo" }],
-};
-
 export default function ConfiguracoesPage() {
   const qc = useQueryClient();
   const params = useSearchParams();
@@ -166,7 +135,6 @@ export default function ConfiguracoesPage() {
     "empresa_config",
   ];
   const entidade = (entidadeParam && entidadesValidas.includes(entidadeParam as Entidade) ? entidadeParam : "categoria") as Entidade;
-  const [data, setData] = useState<Record<Entidade, Item[]>>(seed);
 
   const [open, setOpen] = useState(false);
   const [editId, setEditId] = useState<number | null>(null);
@@ -327,17 +295,21 @@ CONTRATADA: ______________________`);
         status: s.status,
       }));
     }
-    if (entidade !== "plano") return data[entidade] || [];
-    return planosApi.map((p) => ({
-      id: p.id,
-      titulo: p.nome,
-      detalhe: `${Number(p.valor || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} | ${p.recorrencia.charAt(0).toUpperCase() + p.recorrencia.slice(1)} | ${p.qtd_aulas_semanais} aulas/sem | ${p.categoria || "Sem categoria"} / ${p.subcategoria || "Sem subcategoria"}`,
-      status: p.status,
-    }));
-  }, [data, entidade, planosApi, contasBancariasApi, unidadesApi, movimentacoesApi, categoriasApi, subcategoriasApi]);
+    if (entidade === "plano") {
+      return planosApi.map((p) => ({
+        id: p.id,
+        titulo: p.nome,
+        detalhe: `${Number(p.valor || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} | ${p.recorrencia.charAt(0).toUpperCase() + p.recorrencia.slice(1)} | ${p.qtd_aulas_semanais} aulas/sem | ${p.categoria || "Sem categoria"} / ${p.subcategoria || "Sem subcategoria"}`,
+        status: p.status,
+      }));
+    }
+
+    // Entidades sem backend ainda: sem dados falsos.
+    return [];
+  }, [entidade, planosApi, contasBancariasApi, unidadesApi, movimentacoesApi, categoriasApi, subcategoriasApi]);
   const categoriasAtivas = useMemo(
-    () => (categoriasApi.length ? categoriasApi.filter((x) => x.status === "ativo").map((x) => x.nome) : data.categoria.map((x) => x.titulo)),
-    [data, categoriasApi]
+    () => categoriasApi.filter((x) => x.status === "ativo").map((x) => x.nome),
+    [categoriasApi]
   );
   const subcategoriasFiltradasPlano = useMemo(
     () => subcategoriasApi.filter((s) => !planoCategoria || s.categoria_nome === planoCategoria),
@@ -494,18 +466,7 @@ CONTRATADA: ______________________`);
       }
       return;
     }
-    setData((prev) => {
-      const atual = [...prev[entidade]];
-      const detalheFinal = entidade === "modelo_contrato" ? contratoTexto : detalhe;
-      if (editId) {
-        const idx = atual.findIndex((x) => x.id === editId);
-        if (idx >= 0) atual[idx] = { ...atual[idx], titulo, detalhe: detalheFinal, status };
-      } else {
-        const nextId = Math.max(0, ...atual.map((x) => x.id)) + 1;
-        atual.unshift({ id: nextId, titulo, detalhe: detalheFinal, status });
-      }
-      return { ...prev, [entidade]: atual };
-    });
+    // Entidades sem backend ainda: nao criar dados falsos na UI.
     setOpen(false);
   }
 
@@ -545,7 +506,7 @@ CONTRATADA: ______________________`);
       return;
     }
     if (entidade === "movimentacoes_financeiras") return;
-    setData((prev) => ({ ...prev, [entidade]: prev[entidade].filter((x) => x.id !== id) }));
+    return;
   }
 
   return (
@@ -590,6 +551,11 @@ CONTRATADA: ______________________`);
             </div>
           </Card>
         ))}
+        {items.length === 0 && (
+          <Card className="p-5 text-sm text-muted">
+            Nenhum item encontrado. Se esta entidade ainda nao tem backend, ela ficara vazia por enquanto (sem dados falsos).
+          </Card>
+        )}
       </div>
 
       <AnimatePresence>

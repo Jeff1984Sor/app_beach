@@ -137,6 +137,95 @@ async def listar_agenda(data: date | None = None, profissional_id: int | None = 
     }
 
 
+@router.get("/periodo")
+async def listar_agenda_periodo(
+    data_inicio: date,
+    data_fim: date,
+    profissional_id: int | None = None,
+    db: AsyncSession = Depends(get_db),
+):
+    await ensure_bloqueios_table(db)
+    if data_fim < data_inicio:
+        data_fim = data_inicio
+
+    aulas_q = (
+        select(
+            Aula.id,
+            Aula.inicio,
+            Aula.fim,
+            Aula.status,
+            Aula.professor_id,
+            Usuario.nome,
+            Aluno.id,
+            Unidade.nome,
+            Agenda.data,
+        )
+        .join(Agenda, Aula.agenda_id == Agenda.id)
+        .join(Profissional, Profissional.id == Aula.professor_id)
+        .join(Usuario, Usuario.id == Profissional.usuario_id)
+        .join(Aluno, Aluno.id == Aula.aluno_id)
+        .join(Unidade, Unidade.id == Agenda.unidade_id)
+        .where(Agenda.data.between(data_inicio, data_fim))
+        .order_by(Aula.inicio.asc())
+    )
+    if profissional_id:
+        aulas_q = aulas_q.where(Aula.professor_id == profissional_id)
+    aulas_rows = (await db.execute(aulas_q)).all()
+
+    bloqueios = (
+        await db.execute(
+            text(
+                """
+                SELECT b.id, b.data, b.hora_inicio, b.hora_fim, b.motivo, b.profissional_id,
+                       COALESCE(u.nome, 'Todos') AS professor_nome,
+                       COALESCE(un.nome, '') AS unidade_nome
+                FROM agenda_bloqueios b
+                LEFT JOIN profissionais p ON p.id = b.profissional_id
+                LEFT JOIN usuarios u ON u.id = p.usuario_id
+                LEFT JOIN unidades un ON un.id = b.unidade_id
+                WHERE b.data BETWEEN :data_inicio AND :data_fim
+                  AND LOWER(COALESCE(b.status, 'ativo')) = 'ativo'
+                  AND (:profissional_id IS NULL OR b.profissional_id IS NULL OR b.profissional_id = :profissional_id)
+                ORDER BY b.data ASC, b.hora_inicio ASC
+                """
+            ),
+            {"data_inicio": data_inicio, "data_fim": data_fim, "profissional_id": profissional_id},
+        )
+    ).all()
+
+    return {
+        "data_inicio": data_inicio.strftime("%Y-%m-%d"),
+        "data_fim": data_fim.strftime("%Y-%m-%d"),
+        "aulas": [
+            {
+                "id": r[0],
+                "inicio": r[1],
+                "fim": r[2],
+                "status": r[3],
+                "professor_id": r[4],
+                "professor_nome": r[5],
+                "aluno_id": r[6],
+                "unidade": r[7],
+                "data": r[8].strftime("%Y-%m-%d") if r[8] else None,
+            }
+            for r in aulas_rows
+        ],
+        "bloqueios": [
+            {
+                "id": r[0],
+                "data": r[1].strftime("%Y-%m-%d") if r[1] else None,
+                "hora_inicio": r[2],
+                "hora_fim": r[3],
+                "motivo": r[4] or "",
+                "profissional_id": r[5],
+                "professor_nome": r[6],
+                "unidade": r[7],
+            }
+            for r in bloqueios
+        ],
+    }
+
+
 @router.post("/bloqueios")
 async def criar_bloqueio(payload: dict, db: AsyncSession = Depends(get_db)):
     await ensure_bloqueios_table(db)

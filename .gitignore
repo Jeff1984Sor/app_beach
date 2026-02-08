@@ -1,11 +1,13 @@
 # Python
 backend/.venv/
 backend/__pycache__/
+backend/app/**/__pycache__/
 backend/.env
 
 # Node
 frontend/node_modules/
 frontend/.next/
+frontend/public/workbox-*.js
 
 # OS
 .DS_Store

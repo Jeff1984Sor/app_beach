@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
-import { CalendarPlus, MessageCircle, ReceiptText, Pencil, Trash2 } from "lucide-react";
+import { CalendarPlus, MessageCircle, Pencil, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Section } from "@/components/ui/section";
@@ -520,7 +520,7 @@ export default function AlunoFichaPage() {
             }}
             className="rounded-2xl border border-border bg-white px-4 py-3 text-sm font-medium text-text"
           > <CalendarPlus size={15} className="mr-2 inline" /> + Aula Avulsa </button>
-          <button className="rounded-2xl border border-border bg-white px-4 py-3 text-sm font-medium text-text"> <ReceiptText size={15} className="mr-2 inline" /> Nova Cobranca </button>
+          {/* removido por enquanto */}
         </div>
       </Card>
 

@@ -34,7 +34,6 @@ type BloqueioApi = {
   profissional_id?: number | null;
   professor_nome?: string;
 };
-type AgendaResponse = { data: string; aulas: AulaApi[]; bloqueios: BloqueioApi[] };
 type MeResponse = { id: number; nome: string; role: "gestor" | "professor" | "aluno" };
 
 function addDays(baseIso: string, daysToAdd: number): string {
@@ -110,39 +109,26 @@ export default function AgendaPage() {
   const { data, isLoading } = useQuery<{ aulas: AulaApi[]; bloqueios: BloqueioApi[] }>({
     queryKey: ["agenda-v2", modo, dataRef, professorId],
     queryFn: async () => {
-      const diasBusca: string[] = [];
-      if (modo === "dia") {
-        diasBusca.push(dataRef);
-      } else if (modo === "semana") {
-        const ini = startOfWeekIso(dataRef);
-        for (let i = 0; i < 7; i++) diasBusca.push(addDays(ini, i));
-      } else {
-        const iniMes = startOfMonthIso(dataRef);
-        const qtd = daysInMonth(dataRef);
-        for (let i = 0; i < qtd; i++) diasBusca.push(addDays(iniMes, i));
+      let ini = dataRef;
+      let fim = dataRef;
+      if (modo === "semana") {
+        ini = startOfWeekIso(dataRef);
+        fim = addDays(ini, 6);
+      } else if (modo === "mes") {
+        ini = startOfMonthIso(dataRef);
+        fim = addDays(ini, daysInMonth(dataRef) - 1);
       }
 
-      const respostas = await Promise.all(
-        diasBusca.map(async (d) => {
-          const qs = new URLSearchParams();
-          qs.set("data", d);
-          if (professorId !== "todos") qs.set("profissional_id", professorId);
-          const res = await fetch(`${API_URL}/agenda?${qs.toString()}`, { cache: "no-store" });
-          if (!res.ok) return { data: d, aulas: [], bloqueios: [] } as AgendaResponse;
-          return (await res.json()) as AgendaResponse;
-        })
-      );
-
-      const ini = diasBusca[0];
-      const fim = diasBusca[diasBusca.length - 1];
-      const qsBloq = new URLSearchParams({ data_inicio: ini, data_fim: fim });
-      if (professorId !== "todos") qsBloq.set("profissional_id", professorId);
-      const bloqueiosRes = await fetch(`${API_URL}/agenda/bloqueios?${qsBloq.toString()}`, { cache: "no-store" });
-      const bloqueios = bloqueiosRes.ok ? ((await bloqueiosRes.json()) as BloqueioApi[]) : [];
-
+      const qs = new URLSearchParams({ data_inicio: ini, data_fim: fim });
+      if (professorId !== "todos") qs.set("profissional_id", professorId);
+      const res = await fetch(`${API_URL}/agenda/periodo?${qs.toString()}`, { cache: "no-store" });
+      if (!res.ok) return { aulas: [], bloqueios: [] };
+      const body = await res.json();
       return {
-        aulas: respostas.flatMap((r) => r.aulas || []).sort((a, b) => String(a.inicio).localeCompare(String(b.inicio))),
-        bloqueios: bloqueios.sort((a, b) => `${a.data} ${a.hora_inicio}`.localeCompare(`${b.data} ${b.hora_inicio}`)),
+        aulas: (body.aulas || []).sort((a: AulaApi, b: AulaApi) => String(a.inicio).localeCompare(String(b.inicio))),
+        bloqueios: (body.bloqueios || []).sort((a: BloqueioApi, b: BloqueioApi) =>
+          `${a.data} ${a.hora_inicio}`.localeCompare(`${b.data} ${b.hora_inicio}`)
+        ),
       };
     },
   });
@@ -229,8 +215,8 @@ export default function AgendaPage() {
         {!isLoading && (data?.bloqueios || []).map((b) => (
           <Card key={`b-${b.id}`} className="flex items-center justify-between border border-danger/20 bg-danger/5 p-4">
             <div>
-              <p className="text-sm font-semibold text-danger">Bloqueio {b.data} • {b.hora_inicio} - {b.hora_fim}</p>
-              <p className="text-xs text-muted">{b.professor_nome || "Todos"} • {b.motivo || "Sem motivo"}</p>
+              <p className="text-sm font-semibold text-danger">Bloqueio {b.data} - {b.hora_inicio} - {b.hora_fim}</p>
+              <p className="text-xs text-muted">{b.professor_nome || "Todos"} - {b.motivo || "Sem motivo"}</p>
             </div>
             <button className="rounded-xl border border-border px-3 py-1 text-sm text-danger" onClick={() => apagarBloqueio(b.id)}>Excluir</button>
           </Card>
@@ -239,7 +225,7 @@ export default function AgendaPage() {
           <Card key={a.id} className="flex items-center justify-between">
             <div>
               <p className="text-xl font-semibold text-primary">
-                {a.inicio ? new Date(a.inicio).toLocaleDateString("pt-BR") : "--"} • {a.inicio ? new Date(a.inicio).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "--"}
+                {a.inicio ? new Date(a.inicio).toLocaleDateString("pt-BR") : "--"} - {a.inicio ? new Date(a.inicio).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "--"}
               </p>
               <p className="font-medium">{a.professor_nome}</p>
               <p className="text-sm text-muted">{a.unidade}</p>
