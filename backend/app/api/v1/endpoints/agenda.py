@@ -205,3 +205,51 @@ async def excluir_bloqueio(bloqueio_id: int, db: AsyncSession = Depends(get_db))
     if res.rowcount == 0:
         raise HTTPException(status_code=404, detail="Bloqueio nao encontrado")
     return {"ok": True}
+
+
+@router.get("/bloqueios")
+async def listar_bloqueios_periodo(
+    data_inicio: date,
+    data_fim: date | None = None,
+    profissional_id: int | None = None,
+    db: AsyncSession = Depends(get_db),
+):
+    await ensure_bloqueios_table(db)
+    fim = data_fim or data_inicio
+    if fim < data_inicio:
+        fim = data_inicio
+
+    rows = (
+        await db.execute(
+            text(
+                """
+                SELECT b.id, b.data, b.hora_inicio, b.hora_fim, b.motivo, b.profissional_id,
+                       COALESCE(u.nome, 'Todos') AS professor_nome,
+                       COALESCE(un.nome, '') AS unidade_nome
+                FROM agenda_bloqueios b
+                LEFT JOIN profissionais p ON p.id = b.profissional_id
+                LEFT JOIN usuarios u ON u.id = p.usuario_id
+                LEFT JOIN unidades un ON un.id = b.unidade_id
+                WHERE b.data BETWEEN :data_inicio AND :data_fim
+                  AND LOWER(COALESCE(b.status, 'ativo')) = 'ativo'
+                  AND (:profissional_id IS NULL OR b.profissional_id IS NULL OR b.profissional_id = :profissional_id)
+                ORDER BY b.data ASC, b.hora_inicio ASC
+                """
+            ),
+            {"data_inicio": data_inicio, "data_fim": fim, "profissional_id": profissional_id},
+        )
+    ).all()
+
+    return [
+        {
+            "id": r[0],
+            "data": r[1].strftime("%Y-%m-%d") if r[1] else None,
+            "hora_inicio": r[2],
+            "hora_fim": r[3],
+            "motivo": r[4] or "",
+            "profissional_id": r[5],
+            "professor_nome": r[6],
+            "unidade": r[7],
+        }
+        for r in rows
+    ]

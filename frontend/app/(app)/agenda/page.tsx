@@ -133,9 +133,16 @@ export default function AgendaPage() {
         })
       );
 
+      const ini = diasBusca[0];
+      const fim = diasBusca[diasBusca.length - 1];
+      const qsBloq = new URLSearchParams({ data_inicio: ini, data_fim: fim });
+      if (professorId !== "todos") qsBloq.set("profissional_id", professorId);
+      const bloqueiosRes = await fetch(`${API_URL}/agenda/bloqueios?${qsBloq.toString()}`, { cache: "no-store" });
+      const bloqueios = bloqueiosRes.ok ? ((await bloqueiosRes.json()) as BloqueioApi[]) : [];
+
       return {
         aulas: respostas.flatMap((r) => r.aulas || []).sort((a, b) => String(a.inicio).localeCompare(String(b.inicio))),
-        bloqueios: respostas.flatMap((r) => r.bloqueios || []).sort((a, b) => `${a.data} ${a.hora_inicio}`.localeCompare(`${b.data} ${b.hora_inicio}`)),
+        bloqueios: bloqueios.sort((a, b) => `${a.data} ${a.hora_inicio}`.localeCompare(`${b.data} ${b.hora_inicio}`)),
       };
     },
   });
