@@ -115,7 +115,19 @@ async def ficha_aluno(aluno_id: int, db: AsyncSession = Depends(get_db)):
     d = await get_details(db, aluno.id)
     aulas = (await db.execute(select(Aula).where(Aula.aluno_id == aluno_id).order_by(Aula.inicio.desc()).limit(20))).scalars().all()
     financeiro = (await db.execute(select(ContaReceber).where(ContaReceber.aluno_id == aluno_id).order_by(ContaReceber.vencimento.desc()).limit(20))).scalars().all()
-    contratos_rows = (await db.execute(text("SELECT id, plano_nome, data_inicio, data_fim, status FROM aluno_contratos WHERE aluno_id = :id ORDER BY id DESC"), {"id": aluno_id})).all()
+    contratos_rows = (
+        await db.execute(
+            text(
+                """
+                SELECT id, plano_nome, data_inicio, data_fim, status, recorrencia, valor, qtd_aulas_semanais, dias_semana
+                FROM aluno_contratos
+                WHERE aluno_id = :id
+                ORDER BY id DESC
+                """
+            ),
+            {"id": aluno_id},
+        )
+    ).all()
 
     return {
         "id": aluno.id,
@@ -155,6 +167,11 @@ async def ficha_aluno(aluno_id: int, db: AsyncSession = Depends(get_db)):
                 "inicio": c[2].strftime("%d/%m/%Y") if c[2] else "--",
                 "fim": c[3].strftime("%d/%m/%Y") if c[3] else "--",
                 "status": c[4] or "ativo",
+                "recorrencia": c[5] or "mensal",
+                "valor": float(c[6] or 0),
+                "qtd_aulas_semanais": int(c[7] or 0),
+                "dias_semana": [d for d in (c[8] or "").split(",") if d],
+                "inicio_iso": c[2].strftime("%Y-%m-%d") if c[2] else None,
             }
             for c in contratos_rows
         ],
@@ -276,6 +293,70 @@ async def criar_contrato(aluno_id: int, payload: dict, db: AsyncSession = Depend
         "data_inicio": data_inicio.strftime("%Y-%m-%d"),
         "data_fim": data_fim.strftime("%Y-%m-%d"),
     }
+
+
+@router.put("/{aluno_id}/contratos/{contrato_id}")
+async def atualizar_contrato(aluno_id: int, contrato_id: int, payload: dict, db: AsyncSession = Depends(get_db)):
+    await ensure_contracts_table(db)
+    contrato = (
+        await db.execute(
+            text("SELECT id FROM aluno_contratos WHERE id = :contrato_id AND aluno_id = :aluno_id"),
+            {"contrato_id": contrato_id, "aluno_id": aluno_id},
+        )
+    ).first()
+    if not contrato:
+        raise HTTPException(status_code=404, detail="Contrato nao encontrado")
+
+    plano_nome = payload.get("plano_nome") or "Plano Mensal"
+    recorrencia = (payload.get("recorrencia") or "mensal").lower()
+    valor = float(payload.get("valor") or 0)
+    qtd_aulas_semanais = int(payload.get("qtd_aulas_semanais") or 0)
+    dias_semana = ",".join(payload.get("dias_semana") or [])
+    data_inicio_raw = payload.get("data_inicio")
+    data_inicio = datetime.strptime(data_inicio_raw, "%Y-%m-%d").date() if data_inicio_raw else date.today()
+    data_fim = add_months(data_inicio, recorrencia_to_meses(recorrencia))
+
+    await db.execute(
+        text(
+            """
+            UPDATE aluno_contratos
+            SET plano_nome = :plano_nome,
+                recorrencia = :recorrencia,
+                valor = :valor,
+                qtd_aulas_semanais = :qtd_aulas_semanais,
+                data_inicio = :data_inicio,
+                data_fim = :data_fim,
+                dias_semana = :dias_semana
+            WHERE id = :contrato_id AND aluno_id = :aluno_id
+            """
+        ),
+        {
+            "plano_nome": plano_nome,
+            "recorrencia": recorrencia,
+            "valor": valor,
+            "qtd_aulas_semanais": qtd_aulas_semanais,
+            "data_inicio": data_inicio,
+            "data_fim": data_fim,
+            "dias_semana": dias_semana,
+            "contrato_id": contrato_id,
+            "aluno_id": aluno_id,
+        },
+    )
+    await db.commit()
+    return {"ok": True}
+
+
+@router.delete("/{aluno_id}/contratos/{contrato_id}")
+async def deletar_contrato(aluno_id: int, contrato_id: int, db: AsyncSession = Depends(get_db)):
+    await ensure_contracts_table(db)
+    res = await db.execute(
+        text("DELETE FROM aluno_contratos WHERE id = :contrato_id AND aluno_id = :aluno_id"),
+        {"contrato_id": contrato_id, "aluno_id": aluno_id},
+    )
+    await db.commit()
+    if res.rowcount == 0:
+        raise HTTPException(status_code=404, detail="Contrato nao encontrado")
+    return {"ok": True}
 
 
 @router.post("/{aluno_id}/contratos/{contrato_id}/reservas")

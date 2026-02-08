@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
-import { CalendarPlus, MessageCircle, ReceiptText, Pencil } from "lucide-react";
+import { CalendarPlus, MessageCircle, ReceiptText, Pencil, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Section } from "@/components/ui/section";
@@ -78,6 +78,7 @@ export default function AlunoFichaPage() {
   const [diasSemana, setDiasSemana] = useState<string[]>(["Seg", "Qua", "Sex"]);
   const [dataFimPreview, setDataFimPreview] = useState("");
   const [horaAula, setHoraAula] = useState("18:00");
+  const [editingContratoId, setEditingContratoId] = useState<number | null>(null);
 
   const { data, isLoading } = useQuery({ queryKey: ["aluno-ficha", params.id], queryFn: () => fetchFicha(params.id) });
   const { data: planosApi = [] } = useQuery<any[]>({
@@ -169,8 +170,12 @@ export default function AlunoFichaPage() {
 
   async function criarContrato() {
     if (!data) return;
-    const res = await fetch(`${API_URL}/alunos/${data.id}/contratos`, {
-      method: "POST",
+    const url = editingContratoId
+      ? `${API_URL}/alunos/${data.id}/contratos/${editingContratoId}`
+      : `${API_URL}/alunos/${data.id}/contratos`;
+    const method = editingContratoId ? "PUT" : "POST";
+    const res = await fetch(url, {
+      method,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         plano_nome: planoNome,
@@ -182,12 +187,29 @@ export default function AlunoFichaPage() {
       }),
     });
     if (!res.ok) return;
-    const body = await res.json();
+    const body = await res.json().catch(() => ({}));
     setOpenContrato(false);
+    setEditingContratoId(null);
     qc.invalidateQueries({ queryKey: ["aluno-ficha", params.id] });
-    if (body?.contrato_id) {
+    if (!editingContratoId && body?.contrato_id) {
       router.push(`/alunos/${data.id}/agenda-contrato?contratoId=${body.contrato_id}&hora=${encodeURIComponent(horaAula)}`);
     }
+  }
+
+  function abrirEdicaoContrato(c: any) {
+    setEditingContratoId(c.id);
+    selecionarPlano(c.plano);
+    setDataInicio(c.inicio_iso || new Date().toISOString().slice(0, 10));
+    setDiasSemana(c.dias_semana?.length ? c.dias_semana : ["Seg", "Qua", "Sex"]);
+    setOpenContrato(true);
+  }
+
+  async function deletarContrato(contratoId: number) {
+    if (!data) return;
+    if (!window.confirm("Deseja realmente deletar este contrato?")) return;
+    const res = await fetch(`${API_URL}/alunos/${data.id}/contratos/${contratoId}`, { method: "DELETE" });
+    if (!res.ok) return;
+    qc.invalidateQueries({ queryKey: ["aluno-ficha", params.id] });
   }
 
   async function buscarCepEdicao(cepValue: string) {
@@ -244,7 +266,7 @@ export default function AlunoFichaPage() {
         <motion.div key={tab} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}>
           {tab === "Aulas" && <Section title="Aulas"><div className="space-y-3">{data.aulas.map((a: any) => <Card key={a.id} className="flex items-center justify-between p-4"><div><p className="font-semibold">{a.data} • {a.hora}</p><p className="text-sm text-muted">{a.unidade}</p></div><Badge tone={a.status === "confirmada" || a.status === "realizada" ? "success" : a.status === "pendente" ? "default" : "danger"}>{a.status}</Badge></Card>)}</div></Section>}
           {tab === "Financeiro" && <Section title="Financeiro"><div className="grid gap-3 sm:grid-cols-3"><Card><p className="text-sm text-muted">Total em aberto</p><p className="text-2xl font-semibold">{resumoFinanceiro.aberto}</p></Card><Card><p className="text-sm text-muted">Total pago</p><p className="text-2xl font-semibold">{resumoFinanceiro.pago}</p></Card><Card><p className="text-sm text-muted">Proximo vencimento</p><p className="text-2xl font-semibold">{resumoFinanceiro.proximo}</p></Card></div></Section>}
-          {tab === "Contratos" && <Section title="Contratos"><div className="mb-3"><Button onClick={() => setOpenContrato(true)}>Novo contrato</Button></div><div className="space-y-3">{data.contratos.map((c: any) => <Card key={c.id} className="space-y-2 p-4"><p className="text-lg font-semibold">{c.plano}</p><p className="text-sm text-muted">Inicio: {c.inicio} • Fim: {c.fim}</p><div className="flex items-center justify-between"><Badge tone="success">{c.status}</Badge></div></Card>)}</div></Section>}
+          {tab === "Contratos" && <Section title="Contratos"><div className="mb-3"><Button onClick={() => { setEditingContratoId(null); setOpenContrato(true); }}>Novo contrato</Button></div><div className="space-y-3">{data.contratos.map((c: any) => <Card key={c.id} className="space-y-2 p-4"><div className="flex items-start justify-between gap-2"><div><p className="text-lg font-semibold">{c.plano}</p><p className="text-sm text-muted">Inicio: {c.inicio} • Fim: {c.fim}</p></div><div className="flex items-center gap-2"><button onClick={() => abrirEdicaoContrato(c)} className="rounded-xl border border-border p-2 text-muted hover:bg-bg"><Pencil size={14} /></button><button onClick={() => deletarContrato(c.id)} className="rounded-xl border border-border p-2 text-danger hover:bg-danger/10"><Trash2 size={14} /></button></div></div><div className="flex items-center justify-between"><Badge tone="success">{c.status}</Badge></div></Card>)}</div></Section>}
           {tab === "WhatsApp" && <Section title="WhatsApp"><div className="space-y-3">{data.mensagens.map((m: any) => <Card key={m.id} className="space-y-1 p-4"><p className="text-sm">{m.texto}</p><div className="flex items-center justify-between text-xs text-muted"><span>{m.quando}</span><span>{m.status}</span></div></Card>)}</div></Section>}
         </motion.div>
       </AnimatePresence>
@@ -275,7 +297,7 @@ export default function AlunoFichaPage() {
         </div>
       </Modal>
 
-      <Modal open={openContrato} onClose={() => setOpenContrato(false)} title="Novo contrato">
+      <Modal open={openContrato} onClose={() => { setOpenContrato(false); setEditingContratoId(null); }} title={editingContratoId ? "Editar contrato" : "Novo contrato"}>
         <div className="space-y-3">
           <p className="text-xs font-medium uppercase tracking-wide text-muted">Plano</p>
           <select value={planoNome} onChange={(e) => selecionarPlano(e.target.value)} className="h-12 w-full rounded-2xl border border-border bg-white px-4 text-text outline-none">
@@ -315,7 +337,7 @@ export default function AlunoFichaPage() {
             ))}
           </select>
 
-          <Button className="w-full" onClick={criarContrato}>Salvar contrato e escolher dias na agenda</Button>
+          <Button className="w-full" onClick={criarContrato}>{editingContratoId ? "Salvar alteracoes do contrato" : "Salvar contrato e escolher dias na agenda"}</Button>
         </div>
       </Modal>
     </main>
