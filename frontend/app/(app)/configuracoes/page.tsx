@@ -20,6 +20,8 @@ type Entidade =
   | "movimentos_bancarios"
   | "regras_comissao"
   | "plano"
+  | "categoria"
+  | "subcategoria"
   | "media_files"
   | "empresa_config";
 
@@ -41,6 +43,8 @@ const LABELS: Record<Entidade, string> = {
   movimentos_bancarios: "Movimentos Bancarios",
   regras_comissao: "Regras de Comissao",
   plano: "Plano",
+  categoria: "Categoria",
+  subcategoria: "Subcategoria",
   media_files: "Media Files",
   empresa_config: "Empresa Config",
 };
@@ -62,6 +66,8 @@ const seed: Record<Entidade, Item[]> = {
   movimentos_bancarios: [{ id: 1, titulo: "PIX recebido", detalhe: "R$ 550", status: "ativo" }],
   regras_comissao: [{ id: 1, titulo: "Professor", detalhe: "12%", status: "ativo" }],
   plano: [{ id: 1, titulo: "Mensal Gold", detalhe: "R$ 380 | 30 dias | 3 aulas/sem", status: "ativo" }],
+  categoria: [{ id: 1, titulo: "Mensalidades", detalhe: "Receita", status: "ativo" }],
+  subcategoria: [{ id: 1, titulo: "Plano Gold", detalhe: "Categoria: Mensalidades | Tipo: Receita", status: "ativo" }],
   media_files: [{ id: 1, titulo: "Logo Oficial", detalhe: "image/png", status: "ativo" }],
   empresa_config: [{ id: 1, titulo: "Beach Club", detalhe: "Cor primaria #0A84FF", status: "ativo" }],
 };
@@ -79,9 +85,17 @@ export default function ConfiguracoesPage() {
   const [planoValor, setPlanoValor] = useState("");
   const [planoDuracao, setPlanoDuracao] = useState("Mensal");
   const [planoAulas, setPlanoAulas] = useState("");
+  const [categoriaTipo, setCategoriaTipo] = useState<"Receita" | "Despesa">("Receita");
+  const [subcategoriaCategoria, setSubcategoriaCategoria] = useState("");
 
   const items = useMemo(() => data[entidade] || [], [data, entidade]);
+  const categoriasAtivas = useMemo(() => data.categoria.map((x) => x.titulo), [data]);
   const title = LABELS[entidade] || "Configuracoes";
+
+  function tipoDaCategoria(nomeCategoria: string): "Receita" | "Despesa" {
+    const cat = data.categoria.find((x) => x.titulo === nomeCategoria);
+    return cat?.detalhe === "Despesa" ? "Despesa" : "Receita";
+  }
 
   function openNovo() {
     setEditId(null);
@@ -91,6 +105,8 @@ export default function ConfiguracoesPage() {
     setPlanoValor("");
     setPlanoDuracao("Mensal");
     setPlanoAulas("");
+    setCategoriaTipo("Receita");
+    setSubcategoriaCategoria(categoriasAtivas[0] || "");
     setOpen(true);
   }
 
@@ -105,6 +121,13 @@ export default function ConfiguracoesPage() {
       setPlanoDuracao(parts[1] || "Mensal");
       setPlanoAulas(parts[2]?.replace(" aulas/sem", "") || "");
     }
+    if (entidade === "categoria") {
+      setCategoriaTipo(item.detalhe === "Despesa" ? "Despesa" : "Receita");
+    }
+    if (entidade === "subcategoria") {
+      const cat = item.detalhe.match(/Categoria:\s*([^|]+)/)?.[1]?.trim() || "";
+      setSubcategoriaCategoria(cat);
+    }
     setOpen(true);
   }
 
@@ -114,6 +137,10 @@ export default function ConfiguracoesPage() {
       const detalheFinal =
         entidade === "plano"
           ? `${planoValor} | ${planoDuracao} | ${planoAulas} aulas/sem`
+          : entidade === "categoria"
+            ? categoriaTipo
+            : entidade === "subcategoria"
+              ? `Categoria: ${subcategoriaCategoria} | Tipo: ${tipoDaCategoria(subcategoriaCategoria)}`
           : detalhe;
       if (editId) {
         const idx = atual.findIndex((x) => x.id === editId);
@@ -202,6 +229,28 @@ export default function ConfiguracoesPage() {
                     <div className="space-y-1">
                       <p className="text-xs font-medium uppercase tracking-wide text-muted">Quantidade de aulas semanais</p>
                       <Input value={planoAulas} onChange={(e) => setPlanoAulas(e.target.value)} placeholder="Ex: 3" />
+                    </div>
+                  </>
+                ) : entidade === "categoria" ? (
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted">Tipo</p>
+                    <select value={categoriaTipo} onChange={(e) => setCategoriaTipo(e.target.value as "Receita" | "Despesa")} className="h-12 w-full rounded-2xl border border-border bg-white px-4 text-text outline-none">
+                      <option>Receita</option>
+                      <option>Despesa</option>
+                    </select>
+                  </div>
+                ) : entidade === "subcategoria" ? (
+                  <>
+                    <div className="space-y-1">
+                      <p className="text-xs font-medium uppercase tracking-wide text-muted">Categoria</p>
+                      <select value={subcategoriaCategoria} onChange={(e) => setSubcategoriaCategoria(e.target.value)} className="h-12 w-full rounded-2xl border border-border bg-white px-4 text-text outline-none">
+                        {categoriasAtivas.map((c) => (
+                          <option key={c}>{c}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="rounded-2xl border border-border bg-bg px-4 py-3 text-sm text-muted">
+                      Tipo puxado da categoria: <span className="font-semibold text-text">{tipoDaCategoria(subcategoriaCategoria)}</span>
                     </div>
                   </>
                 ) : (

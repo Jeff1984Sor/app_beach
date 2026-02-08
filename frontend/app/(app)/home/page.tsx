@@ -39,6 +39,8 @@ const tabelas = [
   { nome: "Movimentos Bancarios", entidade: "movimentos_bancarios" },
   { nome: "Regras Comissao", entidade: "regras_comissao" },
   { nome: "Plano", entidade: "plano" },
+  { nome: "Categoria", entidade: "categoria" },
+  { nome: "Subcategoria", entidade: "subcategoria" },
   { nome: "Media Files", entidade: "media_files" },
   { nome: "Empresa Config", entidade: "empresa_config" }
 ];
