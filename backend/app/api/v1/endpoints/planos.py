@@ -17,8 +17,31 @@ async def ensure_planos_table(db: AsyncSession):
               valor NUMERIC(10,2) NOT NULL DEFAULT 0,
               recorrencia VARCHAR(20) NOT NULL DEFAULT 'mensal',
               qtd_aulas_semanais INTEGER NOT NULL DEFAULT 1,
+              categoria VARCHAR(120),
+              subcategoria VARCHAR(120),
               status VARCHAR(20) NOT NULL DEFAULT 'ativo'
             )
+            """
+        )
+    )
+    await db.execute(
+        text(
+            """
+            DO $$
+            BEGIN
+              IF NOT EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'planos' AND column_name = 'categoria'
+              ) THEN
+                ALTER TABLE planos ADD COLUMN categoria VARCHAR(120);
+              END IF;
+              IF NOT EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'planos' AND column_name = 'subcategoria'
+              ) THEN
+                ALTER TABLE planos ADD COLUMN subcategoria VARCHAR(120);
+              END IF;
+            END $$;
             """
         )
     )
@@ -32,7 +55,7 @@ async def listar_planos(db: AsyncSession = Depends(get_db)):
         await db.execute(
             text(
                 """
-                SELECT id, nome, valor, recorrencia, qtd_aulas_semanais, status
+                SELECT id, nome, valor, recorrencia, qtd_aulas_semanais, categoria, subcategoria, status
                 FROM planos
                 ORDER BY id DESC
                 """
@@ -46,7 +69,9 @@ async def listar_planos(db: AsyncSession = Depends(get_db)):
             "valor": float(r[2] or 0),
             "recorrencia": r[3],
             "qtd_aulas_semanais": int(r[4] or 0),
-            "status": r[5],
+            "categoria": r[5],
+            "subcategoria": r[6],
+            "status": r[7],
         }
         for r in rows
     ]
@@ -61,13 +86,15 @@ async def criar_plano(payload: dict, db: AsyncSession = Depends(get_db)):
     valor = float(payload.get("valor") or 0)
     recorrencia = (payload.get("recorrencia") or "mensal").lower()
     qtd_aulas_semanais = int(payload.get("qtd_aulas_semanais") or 1)
+    categoria = (payload.get("categoria") or "").strip() or None
+    subcategoria = (payload.get("subcategoria") or "").strip() or None
     status = (payload.get("status") or "ativo").lower()
     row = (
         await db.execute(
             text(
                 """
-                INSERT INTO planos (nome, valor, recorrencia, qtd_aulas_semanais, status)
-                VALUES (:nome, :valor, :recorrencia, :qtd_aulas_semanais, :status)
+                INSERT INTO planos (nome, valor, recorrencia, qtd_aulas_semanais, categoria, subcategoria, status)
+                VALUES (:nome, :valor, :recorrencia, :qtd_aulas_semanais, :categoria, :subcategoria, :status)
                 RETURNING id
                 """
             ),
@@ -76,6 +103,8 @@ async def criar_plano(payload: dict, db: AsyncSession = Depends(get_db)):
                 "valor": valor,
                 "recorrencia": recorrencia,
                 "qtd_aulas_semanais": qtd_aulas_semanais,
+                "categoria": categoria,
+                "subcategoria": subcategoria,
                 "status": status,
             },
         )
@@ -95,6 +124,8 @@ async def atualizar_plano(plano_id: int, payload: dict, db: AsyncSession = Depen
                 valor = :valor,
                 recorrencia = :recorrencia,
                 qtd_aulas_semanais = :qtd_aulas_semanais,
+                categoria = :categoria,
+                subcategoria = :subcategoria,
                 status = :status
             WHERE id = :id
             """
@@ -105,6 +136,8 @@ async def atualizar_plano(plano_id: int, payload: dict, db: AsyncSession = Depen
             "valor": float(payload.get("valor") or 0),
             "recorrencia": (payload.get("recorrencia") or "mensal").lower(),
             "qtd_aulas_semanais": int(payload.get("qtd_aulas_semanais") or 1),
+            "categoria": (payload.get("categoria") or "").strip() or None,
+            "subcategoria": (payload.get("subcategoria") or "").strip() or None,
             "status": (payload.get("status") or "ativo").lower(),
         },
     )

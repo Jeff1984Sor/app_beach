@@ -96,7 +96,33 @@ async def ensure_finance_columns(db: AsyncSession):
               ) THEN
                 ALTER TABLE contas_receber ADD COLUMN conta_bancaria_id INTEGER;
               END IF;
+              IF NOT EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'movimentos_bancarios' AND column_name = 'categoria'
+              ) THEN
+                ALTER TABLE movimentos_bancarios ADD COLUMN categoria VARCHAR(120);
+              END IF;
+              IF NOT EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'movimentos_bancarios' AND column_name = 'subcategoria'
+              ) THEN
+                ALTER TABLE movimentos_bancarios ADD COLUMN subcategoria VARCHAR(120);
+              END IF;
             END $$;
+            """
+        )
+    )
+    await db.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS contas_bancarias (
+              id SERIAL PRIMARY KEY,
+              nome_conta VARCHAR(120) NOT NULL,
+              banco VARCHAR(120) NOT NULL,
+              agencia VARCHAR(40) NOT NULL,
+              cc VARCHAR(40) NOT NULL,
+              saldo NUMERIC(12,2) NOT NULL DEFAULT 0
+            )
             """
         )
     )
@@ -678,10 +704,21 @@ async def pagar_lancamento_financeiro(aluno_id: int, conta_id: int, payload: dic
         raise HTTPException(status_code=404, detail="Lancamento nao encontrado")
 
     plano_nome = "Sem plano"
+    categoria = None
+    subcategoria = None
     if row[2]:
         c = (await db.execute(text("SELECT plano_nome FROM aluno_contratos WHERE id = :id"), {"id": row[2]})).first()
         if c and c[0]:
             plano_nome = c[0]
+            p = (
+                await db.execute(
+                    text("SELECT categoria, subcategoria FROM planos WHERE nome = :nome ORDER BY id DESC LIMIT 1"),
+                    {"nome": plano_nome},
+                )
+            ).first()
+            if p:
+                categoria = p[0]
+                subcategoria = p[1]
 
     await db.execute(
         text(
@@ -708,14 +745,16 @@ async def pagar_lancamento_financeiro(aluno_id: int, conta_id: int, payload: dic
     await db.execute(
         text(
             """
-            INSERT INTO movimentos_bancarios (data_movimento, tipo, valor, descricao, created_at, updated_at)
-            VALUES (:data_movimento, 'entrada', :valor, :descricao, NOW(), NOW())
+            INSERT INTO movimentos_bancarios (data_movimento, tipo, valor, descricao, categoria, subcategoria, created_at, updated_at)
+            VALUES (:data_movimento, 'entrada', :valor, :descricao, :categoria, :subcategoria, NOW(), NOW())
             """
         ),
         {
             "data_movimento": data_pagamento,
             "valor": float(row[1] or 0),
             "descricao": f"{row[3]} + {plano_nome}",
+            "categoria": categoria,
+            "subcategoria": subcategoria,
         },
     )
     await db.commit()

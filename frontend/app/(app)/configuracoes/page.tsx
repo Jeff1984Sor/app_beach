@@ -42,6 +42,8 @@ type PlanoApi = {
   valor: number;
   recorrencia: string;
   qtd_aulas_semanais: number;
+  categoria?: string | null;
+  subcategoria?: string | null;
   status: "ativo" | "inativo";
 };
 
@@ -60,6 +62,8 @@ type MovimentacaoApi = {
   tipo: string;
   valor: number;
   descricao: string;
+  categoria?: string;
+  subcategoria?: string;
 };
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
@@ -149,6 +153,8 @@ export default function ConfiguracoesPage() {
   const [planoValor, setPlanoValor] = useState("");
   const [planoDuracao, setPlanoDuracao] = useState("Mensal");
   const [planoAulas, setPlanoAulas] = useState("");
+  const [planoCategoria, setPlanoCategoria] = useState("");
+  const [planoSubcategoria, setPlanoSubcategoria] = useState("");
   const [categoriaTipo, setCategoriaTipo] = useState<"Receita" | "Despesa">("Receita");
   const [subcategoriaCategoria, setSubcategoriaCategoria] = useState("");
   const [contratoTexto, setContratoTexto] = useState(`CONTRATO DE PRESTACAO DE SERVICOS - BEACH TENNIS
@@ -238,7 +244,7 @@ CONTRATADA: ______________________`);
       return movimentacoesApi.map((m) => ({
         id: m.id,
         titulo: `${m.tipo.toUpperCase()} - ${Number(m.valor || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}`,
-        detalhe: `${m.data_movimento} | ${m.descricao || "-"}`,
+        detalhe: `${m.data_movimento} | ${(m.categoria || "Sem categoria")} / ${(m.subcategoria || "Sem subcategoria")} | ${m.descricao || "-"}`,
         status: "ativo" as const,
       }));
     }
@@ -246,7 +252,7 @@ CONTRATADA: ______________________`);
     return planosApi.map((p) => ({
       id: p.id,
       titulo: p.nome,
-      detalhe: `${Number(p.valor || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} | ${p.recorrencia.charAt(0).toUpperCase() + p.recorrencia.slice(1)} | ${p.qtd_aulas_semanais} aulas/sem`,
+      detalhe: `${Number(p.valor || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} | ${p.recorrencia.charAt(0).toUpperCase() + p.recorrencia.slice(1)} | ${p.qtd_aulas_semanais} aulas/sem | ${p.categoria || "Sem categoria"} / ${p.subcategoria || "Sem subcategoria"}`,
       status: p.status,
     }));
   }, [data, entidade, planosApi, contasBancariasApi, movimentacoesApi]);
@@ -266,6 +272,8 @@ CONTRATADA: ______________________`);
     setPlanoValor("");
     setPlanoDuracao("Mensal");
     setPlanoAulas("");
+    setPlanoCategoria("");
+    setPlanoSubcategoria("");
     setCategoriaTipo("Receita");
     setSubcategoriaCategoria(categoriasAtivas[0] || "");
     if (entidade === "modelo_contrato") {
@@ -285,6 +293,8 @@ CONTRATADA: ______________________`);
         setPlanoValor(String(plano.valor));
         setPlanoDuracao(plano.recorrencia.charAt(0).toUpperCase() + plano.recorrencia.slice(1));
         setPlanoAulas(String(plano.qtd_aulas_semanais));
+        setPlanoCategoria(plano.categoria || "");
+        setPlanoSubcategoria(plano.subcategoria || "");
       }
     }
     if (entidade === "conta_bancaria") {
@@ -314,6 +324,8 @@ CONTRATADA: ______________________`);
         valor: Number(String(planoValor).replace(",", ".")),
         recorrencia: planoDuracao.toLowerCase(),
         qtd_aulas_semanais: Number(planoAulas || 0),
+        categoria: planoCategoria || null,
+        subcategoria: planoSubcategoria || null,
         status,
       };
       const url = editId ? `${API_URL}/planos/${editId}` : `${API_URL}/planos`;
@@ -463,6 +475,14 @@ CONTRATADA: ______________________`);
                     <div className="space-y-1">
                       <p className="text-xs font-medium uppercase tracking-wide text-muted">Quantidade de aulas semanais</p>
                       <Input value={planoAulas} onChange={(e) => setPlanoAulas(e.target.value)} placeholder="Ex: 3" />
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-xs font-medium uppercase tracking-wide text-muted">Categoria</p>
+                      <Input value={planoCategoria} onChange={(e) => setPlanoCategoria(e.target.value)} placeholder="Ex: Mensalidades" />
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-xs font-medium uppercase tracking-wide text-muted">Subcategoria</p>
+                      <Input value={planoSubcategoria} onChange={(e) => setPlanoSubcategoria(e.target.value)} placeholder="Ex: Plano Mensal Gold" />
                     </div>
                   </>
                 ) : entidade === "conta_bancaria" ? (

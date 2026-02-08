@@ -106,6 +106,7 @@ async def listar_movimentacoes_financeiras(db: AsyncSession = Depends(get_db)):
             text(
                 """
                 SELECT id, data_movimento, tipo, valor, descricao
+                     , categoria, subcategoria
                 FROM movimentos_bancarios
                 ORDER BY data_movimento DESC, id DESC
                 LIMIT 300
@@ -120,6 +121,8 @@ async def listar_movimentacoes_financeiras(db: AsyncSession = Depends(get_db)):
             "tipo": r[2],
             "valor": float(r[3] or 0),
             "descricao": r[4] or "",
+            "categoria": r[5] or "",
+            "subcategoria": r[6] or "",
         }
         for r in rows
     ]

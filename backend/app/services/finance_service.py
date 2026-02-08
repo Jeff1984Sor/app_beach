@@ -1,4 +1,4 @@
-﻿from sqlalchemy import select, func
+﻿from sqlalchemy import select, func, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import date, timedelta
 from app.models.entities import Aula, ContaReceber, ContaPagar, RegraComissao
@@ -34,11 +34,30 @@ async def dre(db: AsyncSession):
     resultado = receita - despesas - comissao
     total_aulas = int((await db.scalar(select(func.count(Aula.id)).where(Aula.status == "realizada"))) or 0)
     custo_por_aula = round((custo_aulas / total_aulas), 2) if total_aulas else 0
+
+    detalhamento_receitas = (
+        await db.execute(
+            text(
+                """
+                SELECT COALESCE(categoria, 'Sem categoria') AS categoria,
+                       COALESCE(subcategoria, 'Sem subcategoria') AS subcategoria,
+                       COALESCE(SUM(valor), 0) AS total
+                FROM movimentos_bancarios
+                WHERE LOWER(COALESCE(tipo, '')) = 'entrada'
+                GROUP BY categoria, subcategoria
+                ORDER BY total DESC
+                """
+            )
+        )
+    ).all()
+
     return {
         "receita": receita,
         "despesas": despesas,
         "comissao": comissao,
         "custo_por_aula": custo_por_aula,
         "resultado_final": round(resultado, 2),
+        "receitas_por_categoria": [
+            {"categoria": r[0], "subcategoria": r[1], "total": float(r[2] or 0)} for r in detalhamento_receitas
+        ],
     }
-
