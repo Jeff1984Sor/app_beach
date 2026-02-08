@@ -5,7 +5,7 @@ from sqlalchemy import select, text, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
-from app.models.entities import Agenda, Aluno, Aula, Profissional, Unidade, Usuario
+from app.models.entities import Agenda, Aula, Profissional, Unidade, Usuario
 
 router = APIRouter(prefix="/agenda", tags=["agenda"])
 
@@ -69,14 +69,13 @@ async def listar_agenda(data: date | None = None, profissional_id: int | None = 
             Aula.fim,
             Aula.status,
             Aula.professor_id,
-            Usuario.nome,
-            Aluno.id,
-            Unidade.nome,
+            func.coalesce(Usuario.nome, "Sem professor").label("professor_nome"),
+            Aula.aluno_id,
+            func.coalesce(Unidade.nome, "").label("unidade_nome"),
         )
         .join(Agenda, Aula.agenda_id == Agenda.id, isouter=True)
-        .join(Profissional, Profissional.id == Aula.professor_id)
-        .join(Usuario, Usuario.id == Profissional.usuario_id)
-        .join(Aluno, Aluno.id == Aula.aluno_id)
+        .join(Profissional, Profissional.id == Aula.professor_id, isouter=True)
+        .join(Usuario, Usuario.id == Profissional.usuario_id, isouter=True)
         .join(Unidade, Unidade.id == Agenda.unidade_id, isouter=True)
         # Use the timestamp itself as source-of-truth; tolerate orphaned agenda_id rows.
         .where(func.date(Aula.inicio) == dia)
@@ -118,7 +117,7 @@ async def listar_agenda(data: date | None = None, profissional_id: int | None = 
                 "professor_id": r[4],
                 "professor_nome": r[5],
                 "aluno_id": r[6],
-                "unidade": r[7],
+                "unidade": r[7] or "",
             }
             for r in aulas_rows
         ],
@@ -156,15 +155,14 @@ async def listar_agenda_periodo(
             Aula.fim,
             Aula.status,
             Aula.professor_id,
-            Usuario.nome,
-            Aluno.id,
-            Unidade.nome,
+            func.coalesce(Usuario.nome, "Sem professor").label("professor_nome"),
+            Aula.aluno_id,
+            func.coalesce(Unidade.nome, "").label("unidade_nome"),
             func.date(Aula.inicio).label("data"),
         )
         .join(Agenda, Aula.agenda_id == Agenda.id, isouter=True)
-        .join(Profissional, Profissional.id == Aula.professor_id)
-        .join(Usuario, Usuario.id == Profissional.usuario_id)
-        .join(Aluno, Aluno.id == Aula.aluno_id)
+        .join(Profissional, Profissional.id == Aula.professor_id, isouter=True)
+        .join(Usuario, Usuario.id == Profissional.usuario_id, isouter=True)
         .join(Unidade, Unidade.id == Agenda.unidade_id, isouter=True)
         .where(func.date(Aula.inicio).between(data_inicio, data_fim))
         .order_by(Aula.inicio.asc())
