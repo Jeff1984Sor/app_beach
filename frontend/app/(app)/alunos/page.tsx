@@ -59,7 +59,7 @@ export default function AlunosPage() {
             <Input className="h-12 pl-11" placeholder="Buscar por nome ou telefone" value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
           <Link href="/alunos/novo" className="inline-flex h-10 items-center rounded-xl border border-border bg-white px-4 text-sm font-medium text-text shadow-soft">
-            <Plus size={14} className="mr-1" /> Novo Aluno
+            <Plus size={14} className="mr-1" /> Aluno
           </Link>
         </div>
 
@@ -77,7 +77,7 @@ export default function AlunosPage() {
         </div>
       </Section>
 
-      <section className="space-y-3">
+      <section className="space-y-4">
         {isLoading && Array.from({ length: 4 }).map((_, i) => <Card key={i} className="h-24 animate-pulse bg-white/90" />)}
 
         {!isLoading && filtrados.map((aluno) => (
