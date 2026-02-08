@@ -249,7 +249,10 @@ async def criar_contrato(aluno_id: int, payload: dict, db: AsyncSession = Depend
     recorrencia = (payload.get("recorrencia") or "mensal").lower()
     valor = float(payload.get("valor") or 0)
     qtd_aulas_semanais = int(payload.get("qtd_aulas_semanais") or 0)
-    dias_semana = ",".join(payload.get("dias_semana") or [])
+    dias_lista = payload.get("dias_semana") or []
+    if qtd_aulas_semanais > 0 and len(dias_lista) > qtd_aulas_semanais:
+        raise HTTPException(status_code=400, detail=f"Plano permite no maximo {qtd_aulas_semanais} dia(s) por semana")
+    dias_semana = ",".join(dias_lista)
 
     data_inicio_raw = payload.get("data_inicio")
     data_inicio = datetime.strptime(data_inicio_raw, "%Y-%m-%d").date() if data_inicio_raw else date.today()
@@ -311,7 +314,10 @@ async def atualizar_contrato(aluno_id: int, contrato_id: int, payload: dict, db:
     recorrencia = (payload.get("recorrencia") or "mensal").lower()
     valor = float(payload.get("valor") or 0)
     qtd_aulas_semanais = int(payload.get("qtd_aulas_semanais") or 0)
-    dias_semana = ",".join(payload.get("dias_semana") or [])
+    dias_lista = payload.get("dias_semana") or []
+    if qtd_aulas_semanais > 0 and len(dias_lista) > qtd_aulas_semanais:
+        raise HTTPException(status_code=400, detail=f"Plano permite no maximo {qtd_aulas_semanais} dia(s) por semana")
+    dias_semana = ",".join(dias_lista)
     data_inicio_raw = payload.get("data_inicio")
     data_inicio = datetime.strptime(data_inicio_raw, "%Y-%m-%d").date() if data_inicio_raw else date.today()
     data_fim = add_months(data_inicio, recorrencia_to_meses(recorrencia))

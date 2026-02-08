@@ -157,7 +157,16 @@ export default function AlunoFichaPage() {
   }
 
   function toggleDia(dia: string) {
-    setDiasSemana((prev) => prev.includes(dia) ? prev.filter((d) => d !== dia) : [...prev, dia]);
+    setDiasSemana((prev) => {
+      if (prev.includes(dia)) return prev.filter((d) => d !== dia);
+      const limite = Number(qtdAulas || 0);
+      if (limite > 0 && prev.length >= limite) {
+        setMsgContrato(`Este plano permite no maximo ${limite} dia(s) por semana.`);
+        return prev;
+      }
+      setMsgContrato("");
+      return [...prev, dia];
+    });
   }
 
   function selecionarPlano(nomePlano: string) {
@@ -351,6 +360,7 @@ export default function AlunoFichaPage() {
               </button>
             ))}
           </div>
+          <p className="text-xs text-muted">Selecionados: {diasSemana.length}/{qtdAulas}</p>
 
           <p className="text-xs font-medium uppercase tracking-wide text-muted">Horario</p>
           <select value={horaAula} onChange={(e) => setHoraAula(e.target.value)} className="h-12 w-full rounded-2xl border border-border bg-white px-4 text-text outline-none">
