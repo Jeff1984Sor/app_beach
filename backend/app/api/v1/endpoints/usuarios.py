@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.db.session import get_db
 from app.api.deps import require_role
-from app.models.entities import Usuario, Role
+from app.models.entities import Usuario, Role, Profissional
 from app.schemas.usuario import UsuarioCreate, UsuarioOut
 from app.core.security import get_password_hash
 
@@ -42,4 +42,12 @@ async def criar_usuario(
     db.add(row)
     await db.commit()
     await db.refresh(row)
+
+    # Regra de dominio: todo professor eh um usuario e tambem um profissional.
+    if row.role == Role.professor:
+        profissional = await db.scalar(select(Profissional).where(Profissional.usuario_id == row.id))
+        if not profissional:
+            db.add(Profissional(usuario_id=row.id, valor_hora=0))
+            await db.commit()
+
     return UsuarioOut(id=row.id, nome=row.nome, login=row.email, role=row.role, ativo=row.ativo)

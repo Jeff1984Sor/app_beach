@@ -78,7 +78,7 @@ export default function UsuariosPage() {
 
   return (
     <main className="space-y-4">
-      <Section title="Usuarios" subtitle="Cadastre gestores, professores e alunos">
+      <Section title="Usuarios" subtitle="Profissionais sao usuarios com perfil professor">
         <Card className="space-y-3">
           <form onSubmit={onSubmit} className="space-y-3">
             <Input placeholder="Nome" value={nome} onChange={(e) => setNome(e.target.value)} required />

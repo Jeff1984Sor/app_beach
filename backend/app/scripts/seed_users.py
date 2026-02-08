@@ -1,7 +1,7 @@
 ﻿import asyncio
 from sqlalchemy import select
 from app.db.session import SessionLocal
-from app.models.entities import Usuario, Role
+from app.models.entities import Usuario, Role, Profissional
 from app.core.security import get_password_hash
 
 
@@ -16,17 +16,23 @@ async def main():
     async with SessionLocal() as db:
         for item in USERS:
             exists = await db.scalar(select(Usuario).where(Usuario.email == item["login"]))
-            if exists:
-                continue
-            db.add(
-                Usuario(
-                    nome=item["nome"],
-                    email=item["login"],
-                    senha_hash=get_password_hash(item["senha"]),
-                    role=item["role"],
-                    ativo=True,
+            if not exists:
+                db.add(
+                    Usuario(
+                        nome=item["nome"],
+                        email=item["login"],
+                        senha_hash=get_password_hash(item["senha"]),
+                        role=item["role"],
+                        ativo=True,
+                    )
                 )
-            )
+        await db.commit()
+
+        professores = (await db.execute(select(Usuario).where(Usuario.role == Role.professor))).scalars().all()
+        for prof in professores:
+            prof_row = await db.scalar(select(Profissional).where(Profissional.usuario_id == prof.id))
+            if not prof_row:
+                db.add(Profissional(usuario_id=prof.id, valor_hora=0))
         await db.commit()
     print("Seed concluido")
 
