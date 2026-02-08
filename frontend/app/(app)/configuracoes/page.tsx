@@ -21,6 +21,8 @@ type Entidade =
   | "movimentos_bancarios"
   | "regras_comissao"
   | "plano"
+  | "conta_bancaria"
+  | "movimentacoes_financeiras"
   | "categoria"
   | "subcategoria"
   | "modelo_contrato"
@@ -43,6 +45,23 @@ type PlanoApi = {
   status: "ativo" | "inativo";
 };
 
+type ContaBancariaApi = {
+  id: number;
+  nome_conta: string;
+  banco: string;
+  agencia: string;
+  cc: string;
+  saldo: number;
+};
+
+type MovimentacaoApi = {
+  id: number;
+  data_movimento: string;
+  tipo: string;
+  valor: number;
+  descricao: string;
+};
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
 
 const LABELS: Record<Entidade, string> = {
@@ -56,6 +75,8 @@ const LABELS: Record<Entidade, string> = {
   movimentos_bancarios: "Movimentos Bancarios",
   regras_comissao: "Regras de Comissao",
   plano: "Plano",
+  conta_bancaria: "Conta Bancaria",
+  movimentacoes_financeiras: "Movimentacoes Financeiras",
   categoria: "Categoria",
   subcategoria: "Subcategoria",
   modelo_contrato: "Modelo de Contrato",
@@ -80,6 +101,8 @@ const seed: Record<Entidade, Item[]> = {
   movimentos_bancarios: [{ id: 1, titulo: "PIX recebido", detalhe: "R$ 550", status: "ativo" }],
   regras_comissao: [{ id: 1, titulo: "Professor", detalhe: "12%", status: "ativo" }],
   plano: [{ id: 1, titulo: "Mensal Gold", detalhe: "R$ 380 | 30 dias | 3 aulas/sem", status: "ativo" }],
+  conta_bancaria: [],
+  movimentacoes_financeiras: [],
   categoria: [{ id: 1, titulo: "Mensalidades", detalhe: "Receita", status: "ativo" }],
   subcategoria: [{ id: 1, titulo: "Plano Gold", detalhe: "Categoria: Mensalidades | Tipo: Receita", status: "ativo" }],
   modelo_contrato: [{
@@ -107,6 +130,8 @@ export default function ConfiguracoesPage() {
     "movimentos_bancarios",
     "regras_comissao",
     "plano",
+    "conta_bancaria",
+    "movimentacoes_financeiras",
     "categoria",
     "subcategoria",
     "modelo_contrato",
@@ -181,8 +206,42 @@ CONTRATADA: ______________________`);
     },
     enabled: entidade === "plano",
   });
+  const { data: contasBancariasApi = [] } = useQuery<ContaBancariaApi[]>({
+    queryKey: ["contas-bancarias-config"],
+    queryFn: async () => {
+      const res = await fetch(`${API_URL}/contas-bancarias`, { cache: "no-store" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: entidade === "conta_bancaria",
+  });
+  const { data: movimentacoesApi = [] } = useQuery<MovimentacaoApi[]>({
+    queryKey: ["movimentacoes-financeiras-config"],
+    queryFn: async () => {
+      const res = await fetch(`${API_URL}/movimentacoes-financeiras`, { cache: "no-store" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: entidade === "movimentacoes_financeiras",
+  });
 
   const items = useMemo(() => {
+    if (entidade === "conta_bancaria") {
+      return contasBancariasApi.map((c) => ({
+        id: c.id,
+        titulo: c.nome_conta,
+        detalhe: `${c.banco} | Ag ${c.agencia} | CC ${c.cc} | Saldo ${Number(c.saldo || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}`,
+        status: "ativo" as const,
+      }));
+    }
+    if (entidade === "movimentacoes_financeiras") {
+      return movimentacoesApi.map((m) => ({
+        id: m.id,
+        titulo: `${m.tipo.toUpperCase()} - ${Number(m.valor || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}`,
+        detalhe: `${m.data_movimento} | ${m.descricao || "-"}`,
+        status: "ativo" as const,
+      }));
+    }
     if (entidade !== "plano") return data[entidade] || [];
     return planosApi.map((p) => ({
       id: p.id,
@@ -190,7 +249,7 @@ CONTRATADA: ______________________`);
       detalhe: `${Number(p.valor || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} | ${p.recorrencia.charAt(0).toUpperCase() + p.recorrencia.slice(1)} | ${p.qtd_aulas_semanais} aulas/sem`,
       status: p.status,
     }));
-  }, [data, entidade, planosApi]);
+  }, [data, entidade, planosApi, contasBancariasApi, movimentacoesApi]);
   const categoriasAtivas = useMemo(() => data.categoria.map((x) => x.titulo), [data]);
   const title = LABELS[entidade] || "Configuracoes";
 
@@ -228,6 +287,13 @@ CONTRATADA: ______________________`);
         setPlanoAulas(String(plano.qtd_aulas_semanais));
       }
     }
+    if (entidade === "conta_bancaria") {
+      const conta = contasBancariasApi.find((c) => c.id === item.id);
+      if (conta) {
+        setTitulo(conta.nome_conta);
+        setDetalhe(`${conta.banco} | ${conta.agencia} | ${conta.cc}`);
+      }
+    }
     if (entidade === "categoria") {
       setCategoriaTipo(item.detalhe === "Despesa" ? "Despesa" : "Receita");
     }
@@ -256,6 +322,22 @@ CONTRATADA: ______________________`);
       if (res.ok) {
         qc.invalidateQueries({ queryKey: ["planos-config"] });
         qc.invalidateQueries({ queryKey: ["planos-contrato"] });
+        setOpen(false);
+      }
+      return;
+    }
+    if (entidade === "conta_bancaria") {
+      const payload = {
+        nome_conta: titulo,
+        banco: detalhe.split("|")[0]?.trim() || "",
+        agencia: detalhe.split("|")[1]?.trim() || "",
+        cc: detalhe.split("|")[2]?.trim() || "",
+      };
+      const url = editId ? `${API_URL}/contas-bancarias/${editId}` : `${API_URL}/contas-bancarias`;
+      const method = editId ? "PUT" : "POST";
+      const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      if (res.ok) {
+        qc.invalidateQueries({ queryKey: ["contas-bancarias-config"] });
         setOpen(false);
       }
       return;
@@ -291,6 +373,12 @@ CONTRATADA: ______________________`);
       }
       return;
     }
+    if (entidade === "conta_bancaria") {
+      const res = await fetch(`${API_URL}/contas-bancarias/${id}`, { method: "DELETE" });
+      if (res.ok) qc.invalidateQueries({ queryKey: ["contas-bancarias-config"] });
+      return;
+    }
+    if (entidade === "movimentacoes_financeiras") return;
     setData((prev) => ({ ...prev, [entidade]: prev[entidade].filter((x) => x.id !== id) }));
   }
 
@@ -322,12 +410,16 @@ CONTRATADA: ______________________`);
                 <span className={`rounded-full px-3 py-1 text-xs ${item.status === "ativo" ? "bg-success/10 text-success" : "bg-danger/10 text-danger"}`}>
                   {item.status}
                 </span>
-                <button onClick={() => openEditar(item)} className="rounded-xl border border-border p-2 text-muted transition hover:bg-bg hover:text-text" aria-label="Editar">
-                  <Pencil size={16} />
-                </button>
-                <button onClick={() => apagar(item.id)} className="rounded-xl border border-border p-2 text-danger transition hover:bg-danger/10" aria-label="Apagar">
-                  <Trash2 size={16} />
-                </button>
+                {entidade !== "movimentacoes_financeiras" && (
+                  <>
+                    <button onClick={() => openEditar(item)} className="rounded-xl border border-border p-2 text-muted transition hover:bg-bg hover:text-text" aria-label="Editar">
+                      <Pencil size={16} />
+                    </button>
+                    <button onClick={() => apagar(item.id)} className="rounded-xl border border-border p-2 text-danger transition hover:bg-danger/10" aria-label="Apagar">
+                      <Trash2 size={16} />
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           </Card>
@@ -371,6 +463,13 @@ CONTRATADA: ______________________`);
                     <div className="space-y-1">
                       <p className="text-xs font-medium uppercase tracking-wide text-muted">Quantidade de aulas semanais</p>
                       <Input value={planoAulas} onChange={(e) => setPlanoAulas(e.target.value)} placeholder="Ex: 3" />
+                    </div>
+                  </>
+                ) : entidade === "conta_bancaria" ? (
+                  <>
+                    <div className="space-y-1">
+                      <p className="text-xs font-medium uppercase tracking-wide text-muted">Banco | Agencia | CC</p>
+                      <Input value={detalhe} onChange={(e) => setDetalhe(e.target.value)} placeholder="Banco | Agencia | CC" />
                     </div>
                   </>
                 ) : entidade === "categoria" ? (

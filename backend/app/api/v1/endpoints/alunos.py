@@ -78,6 +78,31 @@ async def ensure_contract_links(db: AsyncSession):
     await db.commit()
 
 
+async def ensure_finance_columns(db: AsyncSession):
+    await db.execute(
+        text(
+            """
+            DO $$
+            BEGIN
+              IF NOT EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'contas_receber' AND column_name = 'data_pagamento'
+              ) THEN
+                ALTER TABLE contas_receber ADD COLUMN data_pagamento DATE;
+              END IF;
+              IF NOT EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'contas_receber' AND column_name = 'conta_bancaria_id'
+              ) THEN
+                ALTER TABLE contas_receber ADD COLUMN conta_bancaria_id INTEGER;
+              END IF;
+            END $$;
+            """
+        )
+    )
+    await db.commit()
+
+
 def add_months(base: date, months: int) -> date:
     month = base.month - 1 + months
     year = base.year + month // 12
@@ -133,6 +158,7 @@ async def list_alunos(db: AsyncSession = Depends(get_db)):
 async def ficha_aluno(aluno_id: int, db: AsyncSession = Depends(get_db)):
     await ensure_details_table(db)
     await ensure_contracts_table(db)
+    await ensure_finance_columns(db)
     row = (await db.execute(select(Aluno, Usuario).join(Usuario, Usuario.id == Aluno.usuario_id).where(Aluno.id == aluno_id))).first()
     if not row:
         raise HTTPException(status_code=404, detail="Aluno nao encontrado")
@@ -183,6 +209,7 @@ async def ficha_aluno(aluno_id: int, db: AsyncSession = Depends(get_db)):
                 "valor": float(f.valor),
                 "status": f.status,
                 "vencimento": f.vencimento.strftime("%d/%m/%Y") if f.vencimento else "--",
+                "data_pagamento": f.data_pagamento.strftime("%d/%m/%Y") if getattr(f, "data_pagamento", None) else None,
             }
             for f in financeiro
         ],
@@ -389,7 +416,6 @@ async def deletar_contrato(aluno_id: int, contrato_id: int, db: AsyncSession = D
             DELETE FROM contas_receber
             WHERE contrato_id = :contrato_id
               AND aluno_id = :aluno_id
-              AND COALESCE(status, 'aberto') = 'aberto'
             """
         ),
         {"contrato_id": contrato_id, "aluno_id": aluno_id},
@@ -400,7 +426,6 @@ async def deletar_contrato(aluno_id: int, contrato_id: int, db: AsyncSession = D
             DELETE FROM aulas
             WHERE contrato_id = :contrato_id
               AND aluno_id = :aluno_id
-              AND LOWER(COALESCE(status, 'agendada')) <> 'realizada'
             """
         ),
         {"contrato_id": contrato_id, "aluno_id": aluno_id},
@@ -559,6 +584,140 @@ async def deletar_aula_aluno(aluno_id: int, aula_id: int, db: AsyncSession = Dep
     if (aula.status or "").lower() == "realizada":
         raise HTTPException(status_code=400, detail="Aula realizada nao pode ser deletada")
     await db.delete(aula)
+    await db.commit()
+    return {"ok": True}
+
+
+@router.get("/{aluno_id}/financeiro")
+async def listar_financeiro_aluno(aluno_id: int, status: str | None = None, db: AsyncSession = Depends(get_db)):
+    await ensure_finance_columns(db)
+    where_status = ""
+    params = {"aluno_id": aluno_id}
+    if status:
+      where_status = " AND LOWER(COALESCE(status, 'aberto')) = :status "
+      params["status"] = status.lower()
+    rows = (
+        await db.execute(
+            text(
+                f"""
+                SELECT id, vencimento, valor, status, data_pagamento
+                FROM contas_receber
+                WHERE aluno_id = :aluno_id
+                {where_status}
+                ORDER BY vencimento DESC, id DESC
+                """
+            ),
+            params,
+        )
+    ).all()
+    return [
+        {
+            "id": r[0],
+            "vencimento": r[1].strftime("%d/%m/%Y") if r[1] else "--",
+            "valor": float(r[2] or 0),
+            "status": r[3] or "aberto",
+            "data_pagamento": r[4].strftime("%d/%m/%Y") if r[4] else None,
+        }
+        for r in rows
+    ]
+
+
+@router.put("/{aluno_id}/financeiro/{conta_id}/vencimento")
+async def alterar_vencimento_conta(aluno_id: int, conta_id: int, payload: dict, db: AsyncSession = Depends(get_db)):
+    data_txt = payload.get("vencimento")
+    if not data_txt:
+        raise HTTPException(status_code=400, detail="Informe vencimento")
+    try:
+        data_venc = datetime.strptime(data_txt, "%Y-%m-%d").date()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Formato de data invalido")
+    res = await db.execute(
+        text("UPDATE contas_receber SET vencimento = :venc WHERE id = :id AND aluno_id = :aluno_id"),
+        {"venc": data_venc, "id": conta_id, "aluno_id": aluno_id},
+    )
+    await db.commit()
+    if res.rowcount == 0:
+        raise HTTPException(status_code=404, detail="Lancamento nao encontrado")
+    return {"ok": True}
+
+
+@router.delete("/{aluno_id}/financeiro/{conta_id}")
+async def excluir_lancamento_financeiro(aluno_id: int, conta_id: int, db: AsyncSession = Depends(get_db)):
+    res = await db.execute(text("DELETE FROM contas_receber WHERE id = :id AND aluno_id = :aluno_id"), {"id": conta_id, "aluno_id": aluno_id})
+    await db.commit()
+    if res.rowcount == 0:
+        raise HTTPException(status_code=404, detail="Lancamento nao encontrado")
+    return {"ok": True}
+
+
+@router.post("/{aluno_id}/financeiro/{conta_id}/pagar")
+async def pagar_lancamento_financeiro(aluno_id: int, conta_id: int, payload: dict, db: AsyncSession = Depends(get_db)):
+    await ensure_finance_columns(db)
+    data_pagamento_txt = payload.get("data_pagamento") or date.today().strftime("%Y-%m-%d")
+    conta_bancaria_id = payload.get("conta_bancaria_id")
+    try:
+        data_pagamento = datetime.strptime(data_pagamento_txt, "%Y-%m-%d").date()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Data de pagamento invalida")
+
+    row = (
+        await db.execute(
+            text(
+                """
+                SELECT cr.id, cr.valor, cr.contrato_id, u.nome
+                FROM contas_receber cr
+                JOIN alunos a ON a.id = cr.aluno_id
+                JOIN usuarios u ON u.id = a.usuario_id
+                WHERE cr.id = :id AND cr.aluno_id = :aluno_id
+                """
+            ),
+            {"id": conta_id, "aluno_id": aluno_id},
+        )
+    ).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Lancamento nao encontrado")
+
+    plano_nome = "Sem plano"
+    if row[2]:
+        c = (await db.execute(text("SELECT plano_nome FROM aluno_contratos WHERE id = :id"), {"id": row[2]})).first()
+        if c and c[0]:
+            plano_nome = c[0]
+
+    await db.execute(
+        text(
+            """
+            UPDATE contas_receber
+            SET status = 'pago', data_pagamento = :data_pagamento, conta_bancaria_id = :conta_bancaria_id
+            WHERE id = :id AND aluno_id = :aluno_id
+            """
+        ),
+        {
+            "data_pagamento": data_pagamento,
+            "conta_bancaria_id": conta_bancaria_id,
+            "id": conta_id,
+            "aluno_id": aluno_id,
+        },
+    )
+
+    if conta_bancaria_id:
+        await db.execute(
+            text("UPDATE contas_bancarias SET saldo = COALESCE(saldo, 0) + :valor WHERE id = :id"),
+            {"valor": float(row[1] or 0), "id": int(conta_bancaria_id)},
+        )
+
+    await db.execute(
+        text(
+            """
+            INSERT INTO movimentos_bancarios (data_movimento, tipo, valor, descricao, created_at, updated_at)
+            VALUES (:data_movimento, 'entrada', :valor, :descricao, NOW(), NOW())
+            """
+        ),
+        {
+            "data_movimento": data_pagamento,
+            "valor": float(row[1] or 0),
+            "descricao": f"{row[3]} + {plano_nome}",
+        },
+    )
     await db.commit()
     return {"ok": True}
 

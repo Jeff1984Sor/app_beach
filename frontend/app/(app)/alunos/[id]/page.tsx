@@ -82,6 +82,11 @@ export default function AlunoFichaPage() {
   const [reagendarData, setReagendarData] = useState("");
   const [reagendarHora, setReagendarHora] = useState("");
   const [aulasSelecionadas, setAulasSelecionadas] = useState<number[]>([]);
+  const [financeiroFiltro, setFinanceiroFiltro] = useState<"aberto" | "pago">("aberto");
+  const [openPagar, setOpenPagar] = useState(false);
+  const [contaSelecionadaPagar, setContaSelecionadaPagar] = useState<number | null>(null);
+  const [dataPagamento, setDataPagamento] = useState(new Date().toISOString().slice(0, 10));
+  const [contaBancariaId, setContaBancariaId] = useState("");
 
   const { data, isLoading } = useQuery({ queryKey: ["aluno-ficha", params.id], queryFn: () => fetchFicha(params.id) });
   const { data: unidades = [] } = useQuery<{ id: number; nome: string }[]>({
@@ -96,6 +101,14 @@ export default function AlunoFichaPage() {
     queryKey: ["planos-contrato"],
     queryFn: async () => {
       const res = await fetch(`${API_URL}/planos`, { cache: "no-store" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+  });
+  const { data: contasBancarias = [] } = useQuery<any[]>({
+    queryKey: ["contas-bancarias"],
+    queryFn: async () => {
+      const res = await fetch(`${API_URL}/contas-bancarias`, { cache: "no-store" });
       if (!res.ok) return [];
       return res.json();
     },
@@ -142,6 +155,10 @@ export default function AlunoFichaPage() {
     const prox = data.financeiro.find((x: any) => x.status === "aberto")?.vencimento || "--";
     return { aberto: `R$ ${aberto.toFixed(2)}`, pago: `R$ ${pago.toFixed(2)}`, proximo: prox };
   }, [data]);
+  const financeiroFiltrado = useMemo(
+    () => (data?.financeiro || []).filter((x: any) => (financeiroFiltro ? String(x.status || "").toLowerCase() === financeiroFiltro : true)),
+    [data, financeiroFiltro]
+  );
 
   function abrirEdicao() {
     if (!data) return;
@@ -322,6 +339,47 @@ export default function AlunoFichaPage() {
     qc.invalidateQueries({ queryKey: ["aluno-ficha", params.id] });
   }
 
+  async function alterarVencimento(contaId: number) {
+    if (!data) return;
+    const novo = window.prompt("Novo vencimento (AAAA-MM-DD):", new Date().toISOString().slice(0, 10));
+    if (!novo) return;
+    await fetch(`${API_URL}/alunos/${data.id}/financeiro/${contaId}/vencimento`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ vencimento: novo }),
+    });
+    qc.invalidateQueries({ queryKey: ["aluno-ficha", params.id] });
+  }
+
+  async function excluirLancamento(contaId: number) {
+    if (!data) return;
+    if (!window.confirm("Deseja excluir este lancamento?")) return;
+    await fetch(`${API_URL}/alunos/${data.id}/financeiro/${contaId}`, { method: "DELETE" });
+    qc.invalidateQueries({ queryKey: ["aluno-ficha", params.id] });
+  }
+
+  function abrirPagar(contaId: number) {
+    setContaSelecionadaPagar(contaId);
+    setDataPagamento(new Date().toISOString().slice(0, 10));
+    setContaBancariaId("");
+    setOpenPagar(true);
+  }
+
+  async function confirmarPagamento() {
+    if (!data || !contaSelecionadaPagar) return;
+    await fetch(`${API_URL}/alunos/${data.id}/financeiro/${contaSelecionadaPagar}/pagar`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        data_pagamento: dataPagamento,
+        conta_bancaria_id: contaBancariaId ? Number(contaBancariaId) : null,
+      }),
+    });
+    setOpenPagar(false);
+    setContaSelecionadaPagar(null);
+    qc.invalidateQueries({ queryKey: ["aluno-ficha", params.id] });
+  }
+
   async function buscarCepEdicao(cepValue: string) {
     const clean = cepValue.replace(/\D/g, "");
     if (clean.length !== 8) return;
@@ -416,7 +474,37 @@ export default function AlunoFichaPage() {
               </div>
             </Section>
           )}
-          {tab === "Financeiro" && <Section title="Financeiro"><div className="grid gap-3 sm:grid-cols-3"><Card><p className="text-sm text-muted">Total em aberto</p><p className="text-2xl font-semibold">{resumoFinanceiro.aberto}</p></Card><Card><p className="text-sm text-muted">Total pago</p><p className="text-2xl font-semibold">{resumoFinanceiro.pago}</p></Card><Card><p className="text-sm text-muted">Proximo vencimento</p><p className="text-2xl font-semibold">{resumoFinanceiro.proximo}</p></Card></div></Section>}
+          {tab === "Financeiro" && (
+            <Section title="Financeiro">
+              <div className="grid gap-3 sm:grid-cols-3">
+                <Card><p className="text-sm text-muted">Total em aberto</p><p className="text-2xl font-semibold">{resumoFinanceiro.aberto}</p></Card>
+                <Card><p className="text-sm text-muted">Total pago</p><p className="text-2xl font-semibold">{resumoFinanceiro.pago}</p></Card>
+                <Card><p className="text-sm text-muted">Proximo vencimento</p><p className="text-2xl font-semibold">{resumoFinanceiro.proximo}</p></Card>
+              </div>
+              <div className="mt-4 flex gap-2">
+                <button onClick={() => setFinanceiroFiltro("aberto")} className={`rounded-xl px-3 py-2 text-sm ${financeiroFiltro === "aberto" ? "bg-primary text-white" : "border border-border bg-white text-text"}`}>Em aberto</button>
+                <button onClick={() => setFinanceiroFiltro("pago")} className={`rounded-xl px-3 py-2 text-sm ${financeiroFiltro === "pago" ? "bg-primary text-white" : "border border-border bg-white text-text"}`}>Pagas</button>
+              </div>
+              <div className="mt-3 space-y-3">
+                {financeiroFiltrado.map((f: any) => (
+                  <Card key={f.id} className="space-y-2 p-4">
+                    <div className="flex items-center justify-between">
+                      <p className="text-lg font-semibold">{Number(f.valor || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</p>
+                      <Badge tone={String(f.status || "").toLowerCase() === "pago" ? "success" : "default"}>{f.status}</Badge>
+                    </div>
+                    <p className="text-sm text-muted">Vencimento: {f.vencimento}{f.data_pagamento ? ` • Pago em: ${f.data_pagamento}` : ""}</p>
+                    <div className="flex flex-wrap gap-2">
+                      <button onClick={() => alterarVencimento(f.id)} className="rounded-xl border border-border px-3 py-2 text-sm text-text hover:bg-bg">Alterar vencimento</button>
+                      <button onClick={() => excluirLancamento(f.id)} className="rounded-xl border border-border px-3 py-2 text-sm text-danger hover:bg-danger/10">Excluir</button>
+                      {String(f.status || "").toLowerCase() !== "pago" && (
+                        <button onClick={() => abrirPagar(f.id)} className="rounded-xl bg-primary px-3 py-2 text-sm text-white">Pagar</button>
+                      )}
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            </Section>
+          )}
           {tab === "Contratos" && <Section title="Contratos"><div className="mb-3"><Button onClick={() => { setEditingContratoId(null); setPlanoNome(""); setValor(""); setRecorrencia(""); setQtdAulas(""); setDataInicio(""); setHoraAula(""); setDiasSemana([]); setMsgContrato(""); setOpenContrato(true); }}>Novo contrato</Button></div><div className="space-y-3">{data.contratos.map((c: any) => <Card key={c.id} className="space-y-2 p-4"><div className="flex items-start justify-between gap-2"><div><p className="text-lg font-semibold">{c.plano}</p><p className="text-sm text-muted">Inicio: {c.inicio} • Fim: {c.fim}</p></div><div className="flex items-center gap-2"><button onClick={() => abrirEdicaoContrato(c)} className="rounded-xl border border-border p-2 text-muted hover:bg-bg"><Pencil size={14} /></button><button onClick={() => deletarContrato(c.id)} className="rounded-xl border border-border p-2 text-danger hover:bg-danger/10"><Trash2 size={14} /></button></div></div><div className="flex items-center justify-between"><Badge tone="success">{c.status}</Badge></div></Card>)}</div></Section>}
           {tab === "WhatsApp" && <Section title="WhatsApp"><div className="space-y-3">{data.mensagens.map((m: any) => <Card key={m.id} className="space-y-1 p-4"><p className="text-sm">{m.texto}</p><div className="flex items-center justify-between text-xs text-muted"><span>{m.quando}</span><span>{m.status}</span></div></Card>)}</div></Section>}
         </motion.div>
@@ -509,6 +597,21 @@ export default function AlunoFichaPage() {
             ))}
           </select>
           <Button className="w-full" onClick={salvarReagendamento}>Salvar reagendamento</Button>
+        </div>
+      </Modal>
+
+      <Modal open={openPagar} onClose={() => setOpenPagar(false)} title="Baixar recebimento">
+        <div className="space-y-3">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted">Data de pagamento</p>
+          <Input type="date" value={dataPagamento} onChange={(e) => setDataPagamento(e.target.value)} />
+          <p className="text-xs font-medium uppercase tracking-wide text-muted">Conta bancaria</p>
+          <select value={contaBancariaId} onChange={(e) => setContaBancariaId(e.target.value)} className="h-12 w-full rounded-2xl border border-border bg-white px-4 text-text outline-none">
+            <option value="">Selecione a conta</option>
+            {contasBancarias.map((c: any) => (
+              <option key={c.id} value={c.id}>{c.nome_conta} - {c.banco}</option>
+            ))}
+          </select>
+          <Button className="w-full" onClick={confirmarPagamento}>Confirmar pagamento</Button>
         </div>
       </Modal>
     </main>
