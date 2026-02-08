@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
-import { CalendarPlus, MessageCircle, Pencil, Trash2 } from "lucide-react";
+import { CalendarPlus, CheckCircle2, MessageCircle, MinusCircle, Pencil, PhoneCall, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Section } from "@/components/ui/section";
@@ -52,6 +52,15 @@ async function fetchFicha(id: string) {
 const tabs = ["Aulas", "Financeiro", "Contratos", "WhatsApp"];
 type PlanoOption = { nome: string; valor: number; recorrencia: string; aulasSemanais: number };
 const horasCheias = Array.from({ length: 15 }, (_, i) => `${String(i + 7).padStart(2, "0")}:00`);
+
+function aulaStatusMeta(statusRaw: string) {
+  const s = String(statusRaw || "").toLowerCase();
+  if (s === "realizada") return { label: "Realizada", tone: "success" as const, icon: CheckCircle2 };
+  if (s === "falta_aviso") return { label: "Falta avisada", tone: "default" as const, icon: PhoneCall };
+  if (s === "falta") return { label: "Falta", tone: "danger" as const, icon: MinusCircle };
+  if (s === "cancelada") return { label: "Cancelada", tone: "danger" as const, icon: MinusCircle };
+  return { label: "Agendada", tone: "default" as const, icon: CalendarPlus };
+}
 
 export default function AlunoFichaPage() {
   const params = useParams<{ id: string }>();
@@ -353,6 +362,17 @@ export default function AlunoFichaPage() {
     qc.invalidateQueries({ queryKey: ["aluno-ficha", params.id] });
   }
 
+  async function marcarStatusAula(aulaId: number, status: "realizada" | "falta_aviso" | "falta" | "agendada") {
+    if (!data) return;
+    const res = await fetch(`${API_URL}/alunos/${data.id}/aulas/${aulaId}/status`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status }),
+    });
+    if (!res.ok) return;
+    qc.invalidateQueries({ queryKey: ["aluno-ficha", params.id] });
+  }
+
   function toggleAulaSelecionada(aulaId: number) {
     setAulasSelecionadas((prev) => (prev.includes(aulaId) ? prev.filter((id) => id !== aulaId) : [...prev, aulaId]));
   }
@@ -559,9 +579,30 @@ export default function AlunoFichaPage() {
                           <p className="text-sm text-muted">{a.unidade}</p>
                         </div>
                       </div>
-                      <Badge tone={a.status === "confirmada" || a.status === "realizada" ? "success" : a.status === "pendente" ? "default" : "danger"}>{a.status}</Badge>
+                      <Badge tone={aulaStatusMeta(a.status).tone}>{aulaStatusMeta(a.status).label}</Badge>
                     </div>
                     <div className="flex gap-2">
+                      <button
+                        title="Marcar como realizada"
+                        onClick={() => marcarStatusAula(a.id, "realizada")}
+                        className="rounded-xl border border-border px-3 py-2 text-sm text-success hover:bg-success/10"
+                      >
+                        <CheckCircle2 size={16} className="mr-2 inline" /> Realizada
+                      </button>
+                      <button
+                        title="Marcar falta avisada"
+                        onClick={() => marcarStatusAula(a.id, "falta_aviso")}
+                        className="rounded-xl border border-border px-3 py-2 text-sm text-primary hover:bg-primary/10"
+                      >
+                        <PhoneCall size={16} className="mr-2 inline" /> Falta avisada
+                      </button>
+                      <button
+                        title="Marcar falta"
+                        onClick={() => marcarStatusAula(a.id, "falta")}
+                        className="rounded-xl border border-border px-3 py-2 text-sm text-danger hover:bg-danger/10"
+                      >
+                        <MinusCircle size={16} className="mr-2 inline" /> Falta
+                      </button>
                       <button onClick={() => abrirReagendar(a)} className="rounded-xl border border-border px-3 py-2 text-sm text-text hover:bg-bg">Reagendar</button>
                       <button onClick={() => deletarAula(a.id)} className="rounded-xl border border-border px-3 py-2 text-sm text-danger hover:bg-danger/10">Deletar</button>
                     </div>

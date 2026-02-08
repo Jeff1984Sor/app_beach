@@ -844,6 +844,31 @@ async def deletar_aula_aluno(aluno_id: int, aula_id: int, db: AsyncSession = Dep
     return {"ok": True}
 
 
+@router.put("/{aluno_id}/aulas/{aula_id}/status")
+async def atualizar_status_aula(aluno_id: int, aula_id: int, payload: dict, db: AsyncSession = Depends(get_db)):
+    """
+    Atualiza status da aula.
+
+    Status permitidos:
+    - realizada
+    - falta_aviso
+    - falta
+    - agendada
+    """
+    status = (payload.get("status") or "").strip().lower()
+    allowed = {"realizada", "falta_aviso", "falta", "agendada"}
+    if status not in allowed:
+        raise HTTPException(status_code=400, detail="Status invalido")
+
+    aula = await db.scalar(select(Aula).where(Aula.id == aula_id, Aula.aluno_id == aluno_id))
+    if not aula:
+        raise HTTPException(status_code=404, detail="Aula nao encontrada")
+
+    aula.status = status
+    await db.commit()
+    return {"ok": True, "status": status}
+
+
 @router.get("/{aluno_id}/financeiro")
 async def listar_financeiro_aluno(aluno_id: int, status: str | None = None, db: AsyncSession = Depends(get_db)):
     await ensure_finance_columns(db)

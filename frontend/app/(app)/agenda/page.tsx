@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarDays, Lock, Search } from "lucide-react";
+import { CalendarDays, CheckCircle2, Lock, MinusCircle, PhoneCall, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Section } from "@/components/ui/section";
@@ -24,6 +24,7 @@ type AulaApi = {
   professor_id: number;
   professor_nome: string;
   unidade: string;
+  aluno_id?: number;
 };
 type BloqueioApi = {
   id: number;
@@ -59,6 +60,15 @@ function startOfMonthIso(baseIso: string): string {
 function daysInMonth(baseIso: string): number {
   const d = new Date(`${baseIso}T00:00:00`);
   return new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+}
+
+function statusMeta(statusRaw: string) {
+  const s = String(statusRaw || "").toLowerCase();
+  if (s === "realizada") return { label: "Realizada", tone: "success" as const, dot: "bg-success", icon: CheckCircle2 };
+  if (s === "falta_aviso") return { label: "Falta avisada", tone: "default" as const, dot: "bg-primary", icon: PhoneCall };
+  if (s === "falta") return { label: "Falta", tone: "danger" as const, dot: "bg-danger", icon: MinusCircle };
+  if (s === "cancelada") return { label: "Cancelada", tone: "danger" as const, dot: "bg-danger", icon: MinusCircle };
+  return { label: "Agendada", tone: "default" as const, dot: "bg-primary", icon: CalendarDays };
 }
 
 export default function AgendaPage() {
@@ -140,6 +150,19 @@ export default function AgendaPage() {
     return all.filter((a) => a.professor_nome?.toLowerCase().includes(q) || a.unidade?.toLowerCase().includes(q));
   }, [data, busca]);
 
+  async function marcarStatus(aula: AulaApi, status: "realizada" | "falta_aviso" | "falta" | "agendada") {
+    const alunoId = aula.aluno_id;
+    if (!alunoId) return;
+    const res = await fetch(`${API_URL}/alunos/${alunoId}/aulas/${aula.id}/status`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status }),
+    });
+    if (!res.ok) return;
+    qc.invalidateQueries({ queryKey: ["agenda-v2"] });
+    qc.invalidateQueries({ queryKey: ["aluno-ficha", String(alunoId)] });
+  }
+
   function toggleDia(dia: string) {
     setBloqDias((prev) => (prev.includes(dia) ? prev.filter((d) => d !== dia) : [...prev, dia]));
   }
@@ -175,32 +198,55 @@ export default function AgendaPage() {
   return (
     <main className="space-y-4">
       <Section title="Agenda" subtitle="Dia, semana e mes por professor">
-        <div className="flex flex-wrap gap-2">
-          <button onClick={() => setModo("dia")} className={`rounded-xl px-4 py-2 text-sm ${modo === "dia" ? "bg-primary text-white" : "border border-border bg-white text-text"}`}>Dia</button>
-          <button onClick={() => setModo("semana")} className={`rounded-xl px-4 py-2 text-sm ${modo === "semana" ? "bg-primary text-white" : "border border-border bg-white text-text"}`}>Semana</button>
-          <button onClick={() => setModo("mes")} className={`rounded-xl px-4 py-2 text-sm ${modo === "mes" ? "bg-primary text-white" : "border border-border bg-white text-text"}`}>Mês</button>
-        </div>
+        <div className="grid gap-2 lg:grid-cols-12">
+          <div className="flex flex-wrap gap-2 lg:col-span-3">
+            <button
+              onClick={() => setModo("dia")}
+              className={`h-12 rounded-2xl px-4 text-sm ${modo === "dia" ? "bg-primary text-white" : "border border-border bg-white text-text"}`}
+            >
+              Dia
+            </button>
+            <button
+              onClick={() => setModo("semana")}
+              className={`h-12 rounded-2xl px-4 text-sm ${modo === "semana" ? "bg-primary text-white" : "border border-border bg-white text-text"}`}
+            >
+              Semana
+            </button>
+            <button
+              onClick={() => setModo("mes")}
+              className={`h-12 rounded-2xl px-4 text-sm ${modo === "mes" ? "bg-primary text-white" : "border border-border bg-white text-text"}`}
+            >
+              Mês
+            </button>
+          </div>
 
-        <div className="grid gap-2 md:grid-cols-4">
-          <div className="md:col-span-2">
+          <div className="lg:col-span-4">
             <div className="relative">
-              <Search className="pointer-events-none absolute left-3 top-3 h-5 w-5 text-muted" />
+              <Search className="pointer-events-none absolute left-3 top-3.5 h-5 w-5 text-muted" />
               <Input className="h-12 pl-11" placeholder="Buscar por professor ou unidade" value={busca} onChange={(e) => setBusca(e.target.value)} />
             </div>
           </div>
-          <Input type="date" className="h-12" value={dataRef} onChange={(e) => setDataRef(e.target.value)} />
-          <select className="h-12 rounded-2xl border border-border bg-white px-4 text-text outline-none" value={professorId} onChange={(e) => setProfessorId(e.target.value)}>
+
+          <Input type="date" className="h-12 lg:col-span-2" value={dataRef} onChange={(e) => setDataRef(e.target.value)} />
+
+          <select
+            className="h-12 rounded-2xl border border-border bg-white px-4 text-text outline-none lg:col-span-2"
+            value={professorId}
+            onChange={(e) => setProfessorId(e.target.value)}
+          >
             <option value="todos">Todos os professores</option>
             {professores.map((p) => (
-              <option key={p.id} value={p.id}>{p.nome}</option>
+              <option key={p.id} value={p.id}>
+                {p.nome}
+              </option>
             ))}
           </select>
-        </div>
 
-        <div className="flex justify-end">
-          <Button className="h-10 px-4" onClick={() => setOpenBloqueio(true)}>
-            <Lock size={14} className="mr-2" /> Bloquear Agenda
-          </Button>
+          <div className="lg:col-span-1">
+            <Button className="h-12 w-full px-3" onClick={() => setOpenBloqueio(true)}>
+              <Lock size={14} className="mr-2" /> Bloquear
+            </Button>
+          </div>
         </div>
       </Section>
 
@@ -222,15 +268,41 @@ export default function AgendaPage() {
           </Card>
         ))}
         {!isLoading && cardsAulas.map((a) => (
-          <Card key={a.id} className="flex items-center justify-between">
-            <div>
-              <p className="text-xl font-semibold text-primary">
-                {a.inicio ? new Date(a.inicio).toLocaleDateString("pt-BR") : "--"} - {a.inicio ? new Date(a.inicio).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "--"}
+          <Card key={a.id} className="flex items-center justify-between gap-3 p-4">
+            <div className="min-w-0">
+              <p className="text-lg font-semibold text-primary">
+                {a.inicio ? new Date(a.inicio).toLocaleDateString("pt-BR") : "--"} -{" "}
+                {a.inicio ? new Date(a.inicio).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "--"}
               </p>
-              <p className="font-medium">{a.professor_nome}</p>
-              <p className="text-sm text-muted">{a.unidade}</p>
+              <p className="truncate font-medium">{a.professor_nome}</p>
+              <p className="truncate text-sm text-muted">{a.unidade}</p>
             </div>
-            <Badge tone={a.status === "realizada" ? "success" : a.status === "cancelada" ? "danger" : "default"}>{a.status}</Badge>
+            <div className="flex shrink-0 items-center gap-2">
+              <div className="hidden items-center gap-1 sm:flex">
+                <button
+                  title="Marcar como realizada"
+                  onClick={() => marcarStatus(a, "realizada")}
+                  className="rounded-xl border border-border p-2 text-success hover:bg-success/10"
+                >
+                  <CheckCircle2 size={16} />
+                </button>
+                <button
+                  title="Marcar falta avisada"
+                  onClick={() => marcarStatus(a, "falta_aviso")}
+                  className="rounded-xl border border-border p-2 text-primary hover:bg-primary/10"
+                >
+                  <PhoneCall size={16} />
+                </button>
+                <button
+                  title="Marcar falta"
+                  onClick={() => marcarStatus(a, "falta")}
+                  className="rounded-xl border border-border p-2 text-danger hover:bg-danger/10"
+                >
+                  <MinusCircle size={16} />
+                </button>
+              </div>
+              <Badge tone={statusMeta(a.status).tone}>{statusMeta(a.status).label}</Badge>
+            </div>
           </Card>
         ))}
         {!isLoading && (data?.aulas?.length || 0) === 0 && (
