@@ -53,7 +53,17 @@ async def list_financeiro(db: AsyncSession = Depends(get_db)):
 
 @router.post("/financeiro")
 async def create_financeiro(payload: FinanceiroIn, db: AsyncSession = Depends(get_db)):
-    row = MovimentoBancario(data_movimento=payload.data, tipo=payload.tipo, valor=payload.valor, descricao=payload.descricao)
+    # Normalize UI-friendly values to accounting-friendly ones.
+    # We use "entrada"/"saida" as canonical values across the app (e.g. DRE queries).
+    tipo_in = (payload.tipo or "").strip().lower()
+    if tipo_in in ("receita", "entrada"):
+        tipo = "entrada"
+    elif tipo_in in ("despesa", "saida", "saída"):
+        tipo = "saida"
+    else:
+        tipo = tipo_in or "entrada"
+
+    row = MovimentoBancario(data_movimento=payload.data, tipo=tipo, valor=payload.valor, descricao=payload.descricao)
     db.add(row)
     await db.commit()
     await db.refresh(row)

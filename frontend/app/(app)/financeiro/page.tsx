@@ -26,7 +26,7 @@ async function fetchDre() {
 export default function FinanceiroPage() {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
-  const [tipo, setTipo] = useState("receita");
+  const [tipo, setTipo] = useState<"entrada" | "saida">("entrada");
   const [valor, setValor] = useState("");
   const [descricao, setDescricao] = useState("");
 
@@ -34,8 +34,10 @@ export default function FinanceiroPage() {
   const { data: dre } = useQuery({ queryKey: ["dre"], queryFn: fetchDre });
 
   const resumo = useMemo(() => {
-    const receitas = movimentos.filter((m: any) => m.tipo === "receita").reduce((a: number, b: any) => a + Number(b.valor), 0);
-    const despesas = movimentos.filter((m: any) => m.tipo !== "receita").reduce((a: number, b: any) => a + Number(b.valor), 0);
+    const isEntrada = (t: any) => ["entrada", "receita"].includes(String(t || "").toLowerCase());
+    const isSaida = (t: any) => ["saida", "saída", "despesa"].includes(String(t || "").toLowerCase());
+    const receitas = movimentos.filter((m: any) => isEntrada(m.tipo)).reduce((a: number, b: any) => a + Number(b.valor), 0);
+    const despesas = movimentos.filter((m: any) => isSaida(m.tipo)).reduce((a: number, b: any) => a + Number(b.valor), 0);
     return { receitas, despesas, resultado: receitas - despesas };
   }, [movimentos]);
 
@@ -46,7 +48,7 @@ export default function FinanceiroPage() {
       body: JSON.stringify({ tipo, data: new Date().toISOString().slice(0, 10), valor: Number(valor || 0), descricao }),
     });
     setOpen(false);
-    setTipo("receita");
+    setTipo("entrada");
     setValor("");
     setDescricao("");
     qc.invalidateQueries({ queryKey: ["financeiro"] });
@@ -97,9 +99,9 @@ export default function FinanceiroPage() {
       <BottomSheet open={open} onClose={() => setOpen(false)}>
         <div className="space-y-3">
           <h3 className="text-lg font-semibold">Novo lancamento</h3>
-          <select value={tipo} onChange={(e) => setTipo(e.target.value)} className="h-12 w-full rounded-2xl border border-border bg-white px-4 text-text outline-none">
-            <option value="receita">Receita</option>
-            <option value="despesa">Despesa</option>
+          <select value={tipo} onChange={(e) => setTipo(e.target.value as "entrada" | "saida")} className="h-12 w-full rounded-2xl border border-border bg-white px-4 text-text outline-none">
+            <option value="entrada">Receita</option>
+            <option value="saida">Despesa</option>
           </select>
           <Input placeholder="Descricao" value={descricao} onChange={(e) => setDescricao(e.target.value)} />
           <Input placeholder="Valor" value={valor} onChange={(e) => setValor(e.target.value)} />
