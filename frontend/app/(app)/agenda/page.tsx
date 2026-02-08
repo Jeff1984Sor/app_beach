@@ -37,9 +37,35 @@ type BloqueioApi = {
 type AgendaResponse = { data: string; aulas: AulaApi[]; bloqueios: BloqueioApi[] };
 type MeResponse = { id: number; nome: string; role: "gestor" | "professor" | "aluno" };
 
+function addDays(baseIso: string, daysToAdd: number): string {
+  const d = new Date(`${baseIso}T00:00:00`);
+  d.setDate(d.getDate() + daysToAdd);
+  return d.toISOString().slice(0, 10);
+}
+
+function startOfWeekIso(baseIso: string): string {
+  const d = new Date(`${baseIso}T00:00:00`);
+  const dow = d.getDay();
+  const diff = dow === 0 ? -6 : 1 - dow;
+  d.setDate(d.getDate() + diff);
+  return d.toISOString().slice(0, 10);
+}
+
+function startOfMonthIso(baseIso: string): string {
+  const d = new Date(`${baseIso}T00:00:00`);
+  d.setDate(1);
+  return d.toISOString().slice(0, 10);
+}
+
+function daysInMonth(baseIso: string): number {
+  const d = new Date(`${baseIso}T00:00:00`);
+  return new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+}
+
 export default function AgendaPage() {
   const qc = useQueryClient();
   const token = useAuthStore((s) => s.token);
+  const [modo, setModo] = useState<"dia" | "semana" | "mes">("dia");
   const [dataRef, setDataRef] = useState(new Date().toISOString().slice(0, 10));
   const [professorId, setProfessorId] = useState<string>("todos");
   const [busca, setBusca] = useState("");
@@ -81,19 +107,40 @@ export default function AgendaPage() {
     if (prof) setProfessorId(String(prof.id));
   }, [me, professores, professorId]);
 
-  const { data, isLoading } = useQuery<AgendaResponse>({
-    queryKey: ["agenda", dataRef, professorId],
+  const { data, isLoading } = useQuery<{ aulas: AulaApi[]; bloqueios: BloqueioApi[] }>({
+    queryKey: ["agenda-v2", modo, dataRef, professorId],
     queryFn: async () => {
-      const qs = new URLSearchParams();
-      qs.set("data", dataRef);
-      if (professorId !== "todos") qs.set("profissional_id", professorId);
-      const res = await fetch(`${API_URL}/agenda?${qs.toString()}`, { cache: "no-store" });
-      if (!res.ok) throw new Error("Falha ao carregar agenda");
-      return res.json();
+      const diasBusca: string[] = [];
+      if (modo === "dia") {
+        diasBusca.push(dataRef);
+      } else if (modo === "semana") {
+        const ini = startOfWeekIso(dataRef);
+        for (let i = 0; i < 7; i++) diasBusca.push(addDays(ini, i));
+      } else {
+        const iniMes = startOfMonthIso(dataRef);
+        const qtd = daysInMonth(dataRef);
+        for (let i = 0; i < qtd; i++) diasBusca.push(addDays(iniMes, i));
+      }
+
+      const respostas = await Promise.all(
+        diasBusca.map(async (d) => {
+          const qs = new URLSearchParams();
+          qs.set("data", d);
+          if (professorId !== "todos") qs.set("profissional_id", professorId);
+          const res = await fetch(`${API_URL}/agenda?${qs.toString()}`, { cache: "no-store" });
+          if (!res.ok) return { data: d, aulas: [], bloqueios: [] } as AgendaResponse;
+          return (await res.json()) as AgendaResponse;
+        })
+      );
+
+      return {
+        aulas: respostas.flatMap((r) => r.aulas || []).sort((a, b) => String(a.inicio).localeCompare(String(b.inicio))),
+        bloqueios: respostas.flatMap((r) => r.bloqueios || []).sort((a, b) => `${a.data} ${a.hora_inicio}`.localeCompare(`${b.data} ${b.hora_inicio}`)),
+      };
     },
   });
 
-  const cards = useMemo(() => {
+  const cardsAulas = useMemo(() => {
     const all = data?.aulas || [];
     if (!busca.trim()) return all;
     const q = busca.toLowerCase();
@@ -123,18 +170,24 @@ export default function AgendaPage() {
     setOpenBloqueio(false);
     setBloqMotivo("");
     setBloqDias([]);
-    qc.invalidateQueries({ queryKey: ["agenda", dataRef, professorId] });
+    qc.invalidateQueries({ queryKey: ["agenda-v2"] });
   }
 
   async function apagarBloqueio(id: number) {
     const res = await fetch(`${API_URL}/agenda/bloqueios/${id}`, { method: "DELETE" });
     if (!res.ok) return;
-    qc.invalidateQueries({ queryKey: ["agenda", dataRef, professorId] });
+    qc.invalidateQueries({ queryKey: ["agenda-v2"] });
   }
 
   return (
     <main className="space-y-4">
-      <Section title="Agenda" subtitle="Agenda por professor com bloqueios e recorrencia">
+      <Section title="Agenda" subtitle="Dia, semana e mes por professor">
+        <div className="flex flex-wrap gap-2">
+          <button onClick={() => setModo("dia")} className={`rounded-xl px-4 py-2 text-sm ${modo === "dia" ? "bg-primary text-white" : "border border-border bg-white text-text"}`}>Dia</button>
+          <button onClick={() => setModo("semana")} className={`rounded-xl px-4 py-2 text-sm ${modo === "semana" ? "bg-primary text-white" : "border border-border bg-white text-text"}`}>Semana</button>
+          <button onClick={() => setModo("mes")} className={`rounded-xl px-4 py-2 text-sm ${modo === "mes" ? "bg-primary text-white" : "border border-border bg-white text-text"}`}>Mês</button>
+        </div>
+
         <div className="grid gap-2 md:grid-cols-4">
           <div className="md:col-span-2">
             <div className="relative">
@@ -150,6 +203,7 @@ export default function AgendaPage() {
             ))}
           </select>
         </div>
+
         <div className="flex justify-end">
           <Button className="h-10 px-4" onClick={() => setOpenBloqueio(true)}>
             <Lock size={14} className="mr-2" /> Bloquear Agenda
@@ -157,22 +211,28 @@ export default function AgendaPage() {
         </div>
       </Section>
 
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Card><p className="text-sm text-muted">Aulas</p><p className="text-2xl font-semibold text-text">{data?.aulas?.length || 0}</p></Card>
+        <Card><p className="text-sm text-muted">Bloqueios</p><p className="text-2xl font-semibold text-text">{data?.bloqueios?.length || 0}</p></Card>
+        <Card><p className="text-sm text-muted">Período</p><p className="text-2xl font-semibold text-success">{modo === "dia" ? "Dia" : modo === "semana" ? "Semana" : "Mês"}</p></Card>
+      </div>
+
       <div className="space-y-3">
         {isLoading && Array.from({ length: 3 }).map((_, i) => <Card key={i} className="h-20 animate-pulse" />)}
         {!isLoading && (data?.bloqueios || []).map((b) => (
           <Card key={`b-${b.id}`} className="flex items-center justify-between border border-danger/20 bg-danger/5 p-4">
             <div>
-              <p className="text-sm font-semibold text-danger">Bloqueio {b.hora_inicio} - {b.hora_fim}</p>
+              <p className="text-sm font-semibold text-danger">Bloqueio {b.data} • {b.hora_inicio} - {b.hora_fim}</p>
               <p className="text-xs text-muted">{b.professor_nome || "Todos"} • {b.motivo || "Sem motivo"}</p>
             </div>
             <button className="rounded-xl border border-border px-3 py-1 text-sm text-danger" onClick={() => apagarBloqueio(b.id)}>Excluir</button>
           </Card>
         ))}
-        {!isLoading && cards.map((a) => (
+        {!isLoading && cardsAulas.map((a) => (
           <Card key={a.id} className="flex items-center justify-between">
             <div>
               <p className="text-xl font-semibold text-primary">
-                {a.inicio ? new Date(a.inicio).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "--"}
+                {a.inicio ? new Date(a.inicio).toLocaleDateString("pt-BR") : "--"} • {a.inicio ? new Date(a.inicio).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "--"}
               </p>
               <p className="font-medium">{a.professor_nome}</p>
               <p className="text-sm text-muted">{a.unidade}</p>
@@ -180,6 +240,9 @@ export default function AgendaPage() {
             <Badge tone={a.status === "realizada" ? "success" : a.status === "cancelada" ? "danger" : "default"}>{a.status}</Badge>
           </Card>
         ))}
+        {!isLoading && (data?.aulas?.length || 0) === 0 && (
+          <Card className="p-5 text-sm text-muted">Nenhuma aula encontrada para o filtro atual.</Card>
+        )}
       </div>
 
       <Modal open={openBloqueio} onClose={() => setOpenBloqueio(false)} title="Bloqueio de Agenda">
