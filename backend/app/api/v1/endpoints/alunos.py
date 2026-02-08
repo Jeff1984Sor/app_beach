@@ -302,7 +302,8 @@ async def ficha_aluno(aluno_id: int, db: AsyncSession = Depends(get_db)):
 
     aluno, user = row
     d = await get_details(db, aluno.id)
-    aulas = (await db.execute(select(Aula).where(Aula.aluno_id == aluno_id).order_by(Aula.inicio.desc()).limit(20))).scalars().all()
+    # Proxima aula primeiro (ordenacao asc). Realizadas/canceladas tendem a ficar no fim naturalmente pelo horario.
+    aulas = (await db.execute(select(Aula).where(Aula.aluno_id == aluno_id).order_by(Aula.inicio.asc()).limit(50))).scalars().all()
     financeiro = (await db.execute(select(ContaReceber).where(ContaReceber.aluno_id == aluno_id).order_by(ContaReceber.vencimento.desc()).limit(20))).scalars().all()
     contratos_rows = (
         await db.execute(
