@@ -129,6 +129,71 @@ async def ensure_finance_columns(db: AsyncSession):
     await db.commit()
 
 
+async def ensure_bloqueios_table(db: AsyncSession):
+    await db.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS agenda_bloqueios (
+              id SERIAL PRIMARY KEY,
+              profissional_id INTEGER REFERENCES profissionais(id) ON DELETE SET NULL,
+              unidade_id INTEGER REFERENCES unidades(id) ON DELETE SET NULL,
+              data DATE NOT NULL,
+              hora_inicio VARCHAR(5) NOT NULL,
+              hora_fim VARCHAR(5) NOT NULL,
+              motivo VARCHAR(255),
+              status VARCHAR(20) NOT NULL DEFAULT 'ativo',
+              created_at TIMESTAMP DEFAULT NOW(),
+              updated_at TIMESTAMP DEFAULT NOW()
+            )
+            """
+        )
+    )
+    await db.commit()
+
+
+async def slot_em_conflito(db: AsyncSession, professor_id: int, inicio_dt: datetime, fim_dt: datetime, ignore_aula_id: int | None = None):
+    conflito_aula_q = select(Aula).where(
+        Aula.professor_id == professor_id,
+        Aula.inicio < fim_dt,
+        Aula.fim > inicio_dt,
+        Aula.status != "cancelada",
+    )
+    if ignore_aula_id:
+        conflito_aula_q = conflito_aula_q.where(Aula.id != ignore_aula_id)
+    conflito_aula = await db.scalar(conflito_aula_q.limit(1))
+    if conflito_aula:
+        return "Conflito: professor ja possui aula nesse horario"
+
+    await ensure_bloqueios_table(db)
+    rows = (
+        await db.execute(
+            text(
+                """
+                SELECT hora_inicio, hora_fim
+                FROM agenda_bloqueios
+                WHERE data = :data
+                  AND LOWER(COALESCE(status, 'ativo')) = 'ativo'
+                  AND (profissional_id IS NULL OR profissional_id = :profissional_id)
+                """
+            ),
+            {"data": inicio_dt.date(), "profissional_id": professor_id},
+        )
+    ).all()
+    inicio_min = inicio_dt.hour * 60 + inicio_dt.minute
+    fim_min = fim_dt.hour * 60 + fim_dt.minute
+    for r in rows:
+        try:
+            hi_h, hi_m = str(r[0]).split(":")
+            hf_h, hf_m = str(r[1]).split(":")
+            b_ini = int(hi_h) * 60 + int(hi_m)
+            b_fim = int(hf_h) * 60 + int(hf_m)
+        except Exception:
+            continue
+        if inicio_min < b_fim and fim_min > b_ini:
+            return "Conflito: horario bloqueado na agenda do professor"
+    return None
+
+
 def add_months(base: date, months: int) -> date:
     month = base.month - 1 + months
     year = base.year + month // 12
@@ -469,6 +534,7 @@ async def deletar_contrato(aluno_id: int, contrato_id: int, db: AsyncSession = D
 @router.post("/{aluno_id}/contratos/{contrato_id}/reservas")
 async def criar_reservas_contrato(aluno_id: int, contrato_id: int, payload: dict, db: AsyncSession = Depends(get_db)):
     await ensure_contract_links(db)
+    await ensure_bloqueios_table(db)
     contrato = (
         await db.execute(
             text(
@@ -507,7 +573,15 @@ async def criar_reservas_contrato(aluno_id: int, contrato_id: int, payload: dict
         db.add(unidade)
         await db.flush()
 
-    prof = await db.scalar(select(Profissional).limit(1))
+    professor_id = payload.get("professor_id")
+    prof = None
+    if professor_id:
+        try:
+            prof = await db.scalar(select(Profissional).where(Profissional.id == int(professor_id)))
+        except Exception:
+            prof = None
+    if not prof:
+        prof = await db.scalar(select(Profissional).limit(1))
     if not prof:
         raise HTTPException(status_code=400, detail="Cadastre ao menos um profissional para reservar agenda")
 
@@ -524,6 +598,7 @@ async def criar_reservas_contrato(aluno_id: int, contrato_id: int, payload: dict
     aulas_criadas = 0
     data_cursor = inicio_periodo
 
+    conflitos: list[str] = []
     while data_cursor <= fim_periodo:
         if data_cursor.weekday() in weekdays:
             agenda = await db.scalar(select(Agenda).where(Agenda.unidade_id == unidade.id, Agenda.data == data_cursor))
@@ -542,6 +617,11 @@ async def criar_reservas_contrato(aluno_id: int, contrato_id: int, payload: dict
                 )
             )
             if not existe:
+                conflito = await slot_em_conflito(db, prof.id, inicio_dt, fim_dt)
+                if conflito:
+                    conflitos.append(f"{data_cursor.strftime('%d/%m/%Y')} {hora_inicio_txt} - {conflito}")
+                    data_cursor += timedelta(days=1)
+                    continue
                 db.add(
                     Aula(
                         agenda_id=agenda.id,
@@ -558,7 +638,7 @@ async def criar_reservas_contrato(aluno_id: int, contrato_id: int, payload: dict
         data_cursor += timedelta(days=1)
 
     await db.commit()
-    return {"ok": True, "aulas_criadas": aulas_criadas}
+    return {"ok": True, "aulas_criadas": aulas_criadas, "conflitos": conflitos}
 
 
 @router.put("/{aluno_id}/aulas/{aula_id}/reagendar")
@@ -583,6 +663,9 @@ async def reagendar_aula(aluno_id: int, aula_id: int, payload: dict, db: AsyncSe
 
     duracao = int((aula.fim - aula.inicio).total_seconds() // 60) if aula.fim and aula.inicio else 60
     novo_fim = novo_inicio + timedelta(minutes=max(duracao, 30))
+    conflito = await slot_em_conflito(db, aula.professor_id, novo_inicio, novo_fim, ignore_aula_id=aula.id)
+    if conflito:
+        raise HTTPException(status_code=409, detail=conflito)
 
     agenda_atual = await db.get(Agenda, aula.agenda_id)
     if not agenda_atual:
