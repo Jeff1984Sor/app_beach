@@ -74,7 +74,24 @@ const seed: Record<Entidade, Item[]> = {
 
 export default function ConfiguracoesPage() {
   const params = useSearchParams();
-  const entidade = (params.get("entidade") || "usuarios") as Entidade;
+  const entidadeParam = params.get("entidade");
+  const entidadesValidas: Entidade[] = [
+    "usuarios",
+    "alunos",
+    "unidades",
+    "agenda",
+    "aulas",
+    "contas_receber",
+    "contas_pagar",
+    "movimentos_bancarios",
+    "regras_comissao",
+    "plano",
+    "categoria",
+    "subcategoria",
+    "media_files",
+    "empresa_config",
+  ];
+  const entidade = (entidadeParam && entidadesValidas.includes(entidadeParam as Entidade) ? entidadeParam : "categoria") as Entidade;
   const [data, setData] = useState<Record<Entidade, Item[]>>(seed);
 
   const [open, setOpen] = useState(false);
@@ -161,6 +178,10 @@ export default function ConfiguracoesPage() {
   return (
     <main className="space-y-5">
       <Section title={title} subtitle="Padrao premium com editar, deletar e modal de novo cadastro">
+        <div className="flex flex-wrap gap-2">
+          <a href="/configuracoes?entidade=categoria" className={`rounded-xl px-3 py-2 text-sm ${entidade === "categoria" ? "bg-primary text-white" : "bg-white text-muted border border-border"}`}>Categoria</a>
+          <a href="/configuracoes?entidade=subcategoria" className={`rounded-xl px-3 py-2 text-sm ${entidade === "subcategoria" ? "bg-primary text-white" : "bg-white text-muted border border-border"}`}>Subcategoria</a>
+        </div>
         <div className="flex justify-end">
           <button onClick={openNovo} className="inline-flex h-10 items-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-white shadow-soft">
             <Plus size={16} /> Novo
