@@ -234,8 +234,7 @@ export default function AlunoFichaPage() {
     setEditingContratoId(null);
     qc.invalidateQueries({ queryKey: ["aluno-ficha", params.id] });
     if (!editingContratoId && body?.contrato_id) {
-      router.push(`/alunos/${data.id}/agenda-contrato?contratoId=${body.contrato_id}&hora=${encodeURIComponent(horaAula)}&unidade=${encodeURIComponent(data.unidade || "")}`);
-      return;
+      setMsgContrato("Contrato e aulas criados com sucesso.");
     }
     setTab("Aulas");
   }
@@ -387,7 +386,7 @@ export default function AlunoFichaPage() {
           </select>
 
           {msgContrato && <p className="text-sm text-danger">{msgContrato}</p>}
-          <Button className="w-full" onClick={criarContrato}>{editingContratoId ? "Salvar alteracoes do contrato" : "Salvar contrato e escolher dias na agenda"}</Button>
+          <Button className="w-full" onClick={criarContrato}>{editingContratoId ? "Salvar alteracoes do contrato" : "Salvar contrato e criar aulas"}</Button>
         </div>
       </Modal>
     </main>
