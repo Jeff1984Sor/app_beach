@@ -30,6 +30,8 @@ export default function UsuariosPage() {
   const [role, setRole] = useState<Role>("professor");
   const [editId, setEditId] = useState<number | null>(null);
   const [editNome, setEditNome] = useState("");
+  const [editLogin, setEditLogin] = useState("");
+  const [editSenha, setEditSenha] = useState("");
   const [editRole, setEditRole] = useState<Role>("professor");
   const [editAtivo, setEditAtivo] = useState(true);
   const [msg, setMsg] = useState<string | null>(null);
@@ -78,6 +80,8 @@ export default function UsuariosPage() {
   function iniciarEdicao(u: Usuario) {
     setEditId(u.id);
     setEditNome(u.nome);
+    setEditLogin(u.login);
+    setEditSenha("");
     setEditRole((u.role === "gestor" ? "gestor" : "professor") as Role);
     setEditAtivo(u.ativo);
   }
@@ -87,7 +91,7 @@ export default function UsuariosPage() {
     const res = await fetch(`${API_URL}/usuarios/${editId}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ nome: editNome, role: editRole, ativo: editAtivo }),
+      body: JSON.stringify({ nome: editNome, login: editLogin, senha: editSenha || null, role: editRole, ativo: editAtivo }),
     });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
@@ -162,6 +166,8 @@ export default function UsuariosPage() {
               {editId === u.id && (
                 <div className="mt-3 space-y-2 rounded-2xl bg-bg p-3">
                   <Input value={editNome} onChange={(e) => setEditNome(e.target.value)} />
+                  <Input value={editLogin} onChange={(e) => setEditLogin(e.target.value)} placeholder="Login" />
+                  <Input value={editSenha} onChange={(e) => setEditSenha(e.target.value)} placeholder="Nova senha (opcional)" type="password" />
                   <select value={editRole} onChange={(e) => setEditRole(e.target.value as Role)} className="h-11 w-full rounded-2xl border border-border bg-white px-4 text-text outline-none">
                     <option value="gestor">Gestor</option>
                     <option value="professor">Professor</option>

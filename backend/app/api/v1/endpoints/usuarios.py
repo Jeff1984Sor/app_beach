@@ -65,10 +65,16 @@ async def atualizar_usuario(
         raise HTTPException(status_code=404, detail="Usuario nao encontrado")
     if payload.role not in {Role.gestor, Role.professor}:
         raise HTTPException(status_code=400, detail="Use cadastro de alunos para role aluno")
+    login_duplicado = await db.scalar(select(Usuario).where(Usuario.email == payload.login, Usuario.id != usuario_id))
+    if login_duplicado:
+        raise HTTPException(status_code=409, detail="Login ja existe")
 
     row.nome = payload.nome
+    row.email = payload.login
     row.role = payload.role
     row.ativo = payload.ativo
+    if payload.senha:
+        row.senha_hash = get_password_hash(payload.senha)
     await db.commit()
     await db.refresh(row)
 

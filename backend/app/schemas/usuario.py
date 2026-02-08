@@ -19,5 +19,7 @@ class UsuarioOut(BaseModel):
 
 class UsuarioUpdate(BaseModel):
     nome: str
+    login: str
     role: Role
     ativo: bool = True
+    senha: str | None = None
