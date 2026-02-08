@@ -87,6 +87,14 @@ export default function AlunoFichaPage() {
   const [contaSelecionadaPagar, setContaSelecionadaPagar] = useState<number | null>(null);
   const [dataPagamento, setDataPagamento] = useState(new Date().toISOString().slice(0, 10));
   const [contaBancariaId, setContaBancariaId] = useState("");
+  const [openAulaAvulsa, setOpenAulaAvulsa] = useState(false);
+  const [avulsaData, setAvulsaData] = useState(new Date().toISOString().slice(0, 10));
+  const [avulsaProfessorId, setAvulsaProfessorId] = useState("");
+  const [avulsaHora, setAvulsaHora] = useState("");
+  const [avulsaValor, setAvulsaValor] = useState("");
+  const [avulsaCategoria, setAvulsaCategoria] = useState("");
+  const [avulsaSubcategoria, setAvulsaSubcategoria] = useState("");
+  const [avulsaMsg, setAvulsaMsg] = useState("");
 
   const { data, isLoading } = useQuery({ queryKey: ["aluno-ficha", params.id], queryFn: () => fetchFicha(params.id) });
   const { data: unidades = [] } = useQuery<{ id: number; nome: string }[]>({
@@ -113,6 +121,45 @@ export default function AlunoFichaPage() {
       return res.json();
     },
   });
+  const { data: professores = [] } = useQuery<any[]>({
+    queryKey: ["agenda-professores"],
+    queryFn: async () => {
+      const res = await fetch(`${API_URL}/agenda/professores`, { cache: "no-store" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+  });
+  const { data: categorias = [] } = useQuery<any[]>({
+    queryKey: ["categorias-aluno"],
+    queryFn: async () => {
+      const res = await fetch(`${API_URL}/categorias`, { cache: "no-store" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+  });
+  const { data: subcategorias = [] } = useQuery<any[]>({
+    queryKey: ["subcategorias-aluno"],
+    queryFn: async () => {
+      const res = await fetch(`${API_URL}/subcategorias`, { cache: "no-store" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+  });
+  const { data: disponibilidadeAvulsa } = useQuery<{ horarios_livres: string[] }>({
+    queryKey: ["disponibilidade-avulsa", params.id, avulsaData, avulsaProfessorId],
+    queryFn: async () => {
+      if (!avulsaProfessorId || !avulsaData) return { horarios_livres: [] };
+      const qs = new URLSearchParams({ data: avulsaData, professor_id: avulsaProfessorId, duracao_minutos: "60" });
+      const res = await fetch(`${API_URL}/alunos/${params.id}/aulas-avulsas/disponibilidade?${qs.toString()}`, { cache: "no-store" });
+      if (!res.ok) return { horarios_livres: [] };
+      return res.json();
+    },
+    enabled: openAulaAvulsa && !!avulsaProfessorId && !!avulsaData,
+  });
+  const subcategoriasFiltradasAvulsa = useMemo(
+    () => subcategorias.filter((s: any) => !avulsaCategoria || s.categoria_nome === avulsaCategoria),
+    [subcategorias, avulsaCategoria]
+  );
   const planos = useMemo<PlanoOption[]>(
     () =>
       planosApi.map((p: any) => ({
@@ -380,6 +427,35 @@ export default function AlunoFichaPage() {
     qc.invalidateQueries({ queryKey: ["aluno-ficha", params.id] });
   }
 
+  async function salvarAulaAvulsa() {
+    if (!data || !avulsaProfessorId || !avulsaData || !avulsaHora) {
+      setAvulsaMsg("Preencha professor, data e horario.");
+      return;
+    }
+    const res = await fetch(`${API_URL}/alunos/${data.id}/aulas-avulsas`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        professor_id: Number(avulsaProfessorId),
+        data: avulsaData,
+        hora: avulsaHora,
+        valor: Number(String(avulsaValor || "0").replace(",", ".")),
+        categoria: avulsaCategoria || null,
+        subcategoria: avulsaSubcategoria || null,
+        unidade: data.unidade,
+      }),
+    });
+    if (!res.ok) {
+      const erro = await res.json().catch(() => ({}));
+      setAvulsaMsg(erro.detail || "Falha ao salvar aula avulsa.");
+      return;
+    }
+    setOpenAulaAvulsa(false);
+    setAvulsaMsg("");
+    setAvulsaHora("");
+    qc.invalidateQueries({ queryKey: ["aluno-ficha", params.id] });
+  }
+
   async function buscarCepEdicao(cepValue: string) {
     const clean = cepValue.replace(/\D/g, "");
     if (clean.length !== 8) return;
@@ -423,7 +499,19 @@ export default function AlunoFichaPage() {
         </div>
         <div className="grid gap-2 sm:grid-cols-3">
           <a href={`https://wa.me/55${String(data.telefone || "").replace(/\D/g, "")}`} target="_blank" className="rounded-2xl border border-border bg-white px-4 py-3 text-sm font-medium text-text"> <MessageCircle size={15} className="mr-2 inline" /> WhatsApp </a>
-          <button className="rounded-2xl border border-border bg-white px-4 py-3 text-sm font-medium text-text"> <CalendarPlus size={15} className="mr-2 inline" /> Nova Aula </button>
+          <button
+            onClick={() => {
+              setOpenAulaAvulsa(true);
+              setAvulsaProfessorId(professores?.[0]?.id ? String(professores[0].id) : "");
+              setAvulsaData(new Date().toISOString().slice(0, 10));
+              setAvulsaHora("");
+              setAvulsaValor("");
+              setAvulsaCategoria("");
+              setAvulsaSubcategoria("");
+              setAvulsaMsg("");
+            }}
+            className="rounded-2xl border border-border bg-white px-4 py-3 text-sm font-medium text-text"
+          > <CalendarPlus size={15} className="mr-2 inline" /> + Aula Avulsa </button>
           <button className="rounded-2xl border border-border bg-white px-4 py-3 text-sm font-medium text-text"> <ReceiptText size={15} className="mr-2 inline" /> Nova Cobranca </button>
         </div>
       </Card>
@@ -612,6 +700,37 @@ export default function AlunoFichaPage() {
             ))}
           </select>
           <Button className="w-full" onClick={confirmarPagamento}>Confirmar pagamento</Button>
+        </div>
+      </Modal>
+
+      <Modal open={openAulaAvulsa} onClose={() => setOpenAulaAvulsa(false)} title="+ Aula Avulsa">
+        <div className="space-y-3">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted">Professor</p>
+          <select value={avulsaProfessorId} onChange={(e) => { setAvulsaProfessorId(e.target.value); setAvulsaHora(""); }} className="h-12 w-full rounded-2xl border border-border bg-white px-4 text-text outline-none">
+            <option value="">Selecione</option>
+            {professores.map((p: any) => <option key={p.id} value={p.id}>{p.nome}</option>)}
+          </select>
+          <p className="text-xs font-medium uppercase tracking-wide text-muted">Data</p>
+          <Input type="date" value={avulsaData} onChange={(e) => { setAvulsaData(e.target.value); setAvulsaHora(""); }} />
+          <p className="text-xs font-medium uppercase tracking-wide text-muted">Horarios livres</p>
+          <select value={avulsaHora} onChange={(e) => setAvulsaHora(e.target.value)} className="h-12 w-full rounded-2xl border border-border bg-white px-4 text-text outline-none">
+            <option value="">Selecione</option>
+            {(disponibilidadeAvulsa?.horarios_livres || []).map((h) => <option key={h} value={h}>{h}</option>)}
+          </select>
+          <p className="text-xs font-medium uppercase tracking-wide text-muted">Valor</p>
+          <Input placeholder="Ex: 120,00" value={avulsaValor} onChange={(e) => setAvulsaValor(e.target.value)} />
+          <p className="text-xs font-medium uppercase tracking-wide text-muted">Categoria</p>
+          <select value={avulsaCategoria} onChange={(e) => { setAvulsaCategoria(e.target.value); setAvulsaSubcategoria(""); }} className="h-12 w-full rounded-2xl border border-border bg-white px-4 text-text outline-none">
+            <option value="">Selecione</option>
+            {categorias.filter((c: any) => c.status === "ativo").map((c: any) => <option key={c.id} value={c.nome}>{c.nome}</option>)}
+          </select>
+          <p className="text-xs font-medium uppercase tracking-wide text-muted">Subcategoria</p>
+          <select value={avulsaSubcategoria} onChange={(e) => setAvulsaSubcategoria(e.target.value)} className="h-12 w-full rounded-2xl border border-border bg-white px-4 text-text outline-none">
+            <option value="">Selecione</option>
+            {subcategoriasFiltradasAvulsa.filter((s: any) => s.status === "ativo").map((s: any) => <option key={s.id} value={s.nome}>{s.nome}</option>)}
+          </select>
+          {avulsaMsg && <p className="text-sm text-danger">{avulsaMsg}</p>}
+          <Button className="w-full" onClick={salvarAulaAvulsa}>Salvar aula avulsa</Button>
         </div>
       </Modal>
     </main>

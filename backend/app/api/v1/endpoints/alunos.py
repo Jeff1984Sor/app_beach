@@ -194,6 +194,23 @@ async def slot_em_conflito(db: AsyncSession, professor_id: int, inicio_dt: datet
     return None
 
 
+def gerar_horas_cheias(inicio_h: int = 7, fim_h: int = 21) -> list[str]:
+    return [f"{h:02d}:00" for h in range(inicio_h, fim_h + 1)]
+
+
+async def listar_horarios_disponiveis(db: AsyncSession, professor_id: int, data_ref: date, duracao_min: int = 60) -> list[str]:
+    horas = gerar_horas_cheias()
+    livres: list[str] = []
+    for hhmm in horas:
+        hh, mm = hhmm.split(":")
+        ini = datetime(data_ref.year, data_ref.month, data_ref.day, int(hh), int(mm))
+        fim = ini + timedelta(minutes=max(30, duracao_min))
+        conflito = await slot_em_conflito(db, professor_id, ini, fim)
+        if not conflito:
+            livres.append(hhmm)
+    return livres
+
+
 def add_months(base: date, months: int) -> date:
     month = base.month - 1 + months
     year = base.year + month // 12
@@ -639,6 +656,97 @@ async def criar_reservas_contrato(aluno_id: int, contrato_id: int, payload: dict
 
     await db.commit()
     return {"ok": True, "aulas_criadas": aulas_criadas, "conflitos": conflitos}
+
+
+@router.get("/{aluno_id}/aulas-avulsas/disponibilidade")
+async def disponibilidade_aula_avulsa(
+    aluno_id: int,
+    data: str,
+    professor_id: int | None = None,
+    duracao_minutos: int = 60,
+    db: AsyncSession = Depends(get_db),
+):
+    aluno = await db.get(Aluno, aluno_id)
+    if not aluno:
+        raise HTTPException(status_code=404, detail="Aluno nao encontrado")
+    try:
+        data_ref = datetime.strptime(data, "%Y-%m-%d").date()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Data invalida. Use YYYY-MM-DD")
+
+    prof = await db.scalar(select(Profissional).where(Profissional.id == professor_id)) if professor_id else None
+    if not prof:
+        prof = await db.scalar(select(Profissional).limit(1))
+    if not prof:
+        raise HTTPException(status_code=400, detail="Sem professor cadastrado")
+
+    horarios = await listar_horarios_disponiveis(db, prof.id, data_ref, duracao_minutos)
+    return {"professor_id": prof.id, "data": data_ref.strftime("%Y-%m-%d"), "horarios_livres": horarios}
+
+
+@router.post("/{aluno_id}/aulas-avulsas")
+async def criar_aula_avulsa(aluno_id: int, payload: dict, db: AsyncSession = Depends(get_db)):
+    await ensure_finance_columns(db)
+    await ensure_bloqueios_table(db)
+    aluno = await db.get(Aluno, aluno_id)
+    if not aluno:
+        raise HTTPException(status_code=404, detail="Aluno nao encontrado")
+
+    data_txt = payload.get("data")
+    hora_txt = payload.get("hora")
+    professor_id = payload.get("professor_id")
+    valor = float(payload.get("valor") or 0)
+    duracao_min = int(payload.get("duracao_minutos") or 60)
+
+    if not (data_txt and hora_txt and professor_id):
+        raise HTTPException(status_code=400, detail="Informe data, hora e professor")
+
+    try:
+        data_ref = datetime.strptime(data_txt, "%Y-%m-%d").date()
+        hh, mm = hora_txt.split(":")
+        ini = datetime(data_ref.year, data_ref.month, data_ref.day, int(hh), int(mm))
+    except Exception:
+        raise HTTPException(status_code=400, detail="Data/hora invalida")
+
+    prof = await db.scalar(select(Profissional).where(Profissional.id == int(professor_id)))
+    if not prof:
+        raise HTTPException(status_code=404, detail="Professor nao encontrado")
+    fim = ini + timedelta(minutes=max(30, duracao_min))
+    conflito = await slot_em_conflito(db, prof.id, ini, fim)
+    if conflito:
+        raise HTTPException(status_code=409, detail=conflito)
+
+    unidade_nome = payload.get("unidade")
+    unidade = await db.scalar(select(Unidade).where(Unidade.nome == unidade_nome)) if unidade_nome else None
+    if not unidade:
+        unidade = await db.scalar(select(Unidade).limit(1))
+    if not unidade:
+        unidade = Unidade(nome=unidade_nome or "Unidade Padrao", cep="00000000", endereco="Nao informado")
+        db.add(unidade)
+        await db.flush()
+
+    agenda = await db.scalar(select(Agenda).where(Agenda.unidade_id == unidade.id, Agenda.data == data_ref))
+    if not agenda:
+        agenda = Agenda(unidade_id=unidade.id, data=data_ref)
+        db.add(agenda)
+        await db.flush()
+
+    aula = Aula(
+        agenda_id=agenda.id,
+        contrato_id=None,
+        aluno_id=aluno_id,
+        professor_id=prof.id,
+        inicio=ini,
+        fim=fim,
+        status="agendada",
+        valor=valor,
+    )
+    db.add(aula)
+    if valor > 0:
+        db.add(ContaReceber(contrato_id=None, aluno_id=aluno_id, vencimento=data_ref, valor=valor, status="aberto"))
+    await db.commit()
+    await db.refresh(aula)
+    return {"ok": True, "aula_id": aula.id}
 
 
 @router.put("/{aluno_id}/aulas/{aula_id}/reagendar")
