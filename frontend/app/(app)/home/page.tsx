@@ -29,7 +29,7 @@ const mapRole: Record<string, Kpi[]> = {
 };
 
 const tabelas = [
-  { nome: "Usuarios", href: "/home" },
+  { nome: "Usuarios", href: "/usuarios" },
   { nome: "Profissionais", href: "/home" },
   { nome: "Alunos", href: "/alunos" },
   { nome: "Unidades", href: "/home" },
