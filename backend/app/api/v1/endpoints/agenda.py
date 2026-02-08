@@ -98,7 +98,7 @@ async def listar_agenda(data: date | None = None, profissional_id: int | None = 
                 LEFT JOIN unidades un ON un.id = b.unidade_id
                 WHERE b.data = :data
                   AND LOWER(COALESCE(b.status, 'ativo')) = 'ativo'
-                  AND (:profissional_id IS NULL OR b.profissional_id IS NULL OR b.profissional_id = :profissional_id)
+                  AND ((:profissional_id)::int IS NULL OR b.profissional_id IS NULL OR b.profissional_id = (:profissional_id)::int)
                 ORDER BY b.hora_inicio ASC
                 """
             ),
@@ -184,7 +184,7 @@ async def listar_agenda_periodo(
                 LEFT JOIN unidades un ON un.id = b.unidade_id
                 WHERE b.data BETWEEN :data_inicio AND :data_fim
                   AND LOWER(COALESCE(b.status, 'ativo')) = 'ativo'
-                  AND (:profissional_id IS NULL OR b.profissional_id IS NULL OR b.profissional_id = :profissional_id)
+                  AND ((:profissional_id)::int IS NULL OR b.profissional_id IS NULL OR b.profissional_id = (:profissional_id)::int)
                 ORDER BY b.data ASC, b.hora_inicio ASC
                 """
             ),
@@ -320,7 +320,7 @@ async def listar_bloqueios_periodo(
                 LEFT JOIN unidades un ON un.id = b.unidade_id
                 WHERE b.data BETWEEN :data_inicio AND :data_fim
                   AND LOWER(COALESCE(b.status, 'ativo')) = 'ativo'
-                  AND (:profissional_id IS NULL OR b.profissional_id IS NULL OR b.profissional_id = :profissional_id)
+                  AND ((:profissional_id)::int IS NULL OR b.profissional_id IS NULL OR b.profissional_id = (:profissional_id)::int)
                 ORDER BY b.data ASC, b.hora_inicio ASC
                 """
             ),
