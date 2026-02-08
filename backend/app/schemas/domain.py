@@ -12,6 +12,14 @@ class AlunoOut(AlunoIn):
     id: int
 
 
+class AlunoCadastroIn(BaseModel):
+    nome: str
+    login: str
+    senha: str
+    telefone: str | None = None
+    status: str = "ativo"
+
+
 class AulaIn(BaseModel):
     agenda_id: int
     aluno_id: int

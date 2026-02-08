@@ -7,13 +7,13 @@ import { Input } from "@/components/ui/input";
 import { Section } from "@/components/ui/section";
 import { useAuthStore } from "@/store/auth";
 
-type Role = "gestor" | "professor" | "aluno";
+type Role = "gestor" | "professor";
 
 type Usuario = {
   id: number;
   nome: string;
   login: string;
-  role: Role;
+  role: "gestor" | "professor" | "aluno";
   ativo: boolean;
 };
 
@@ -78,7 +78,7 @@ export default function UsuariosPage() {
 
   return (
     <main className="space-y-4">
-      <Section title="Usuarios" subtitle="Profissionais sao usuarios com perfil professor">
+      <Section title="Usuarios" subtitle="Cadastre apenas gestor e professor. Aluno e cadastrado em Alunos.">
         <Card className="space-y-3">
           <form onSubmit={onSubmit} className="space-y-3">
             <Input placeholder="Nome" value={nome} onChange={(e) => setNome(e.target.value)} required />
@@ -87,7 +87,6 @@ export default function UsuariosPage() {
             <select value={role} onChange={(e) => setRole(e.target.value as Role)} className="h-12 w-full rounded-2xl border border-border bg-white px-4 text-text outline-none">
               <option value="gestor">Gestor</option>
               <option value="professor">Professor</option>
-              <option value="aluno">Aluno</option>
             </select>
             {msg && <p className="text-sm text-muted">{msg}</p>}
             <Button className="h-11 w-full" disabled={loading}>{loading ? "Salvando..." : "Cadastrar"}</Button>

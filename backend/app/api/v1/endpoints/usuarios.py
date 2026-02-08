@@ -25,8 +25,8 @@ async def criar_usuario(
     db: AsyncSession = Depends(get_db),
     _: Usuario = Depends(require_role(Role.gestor)),
 ):
-    if payload.role not in {Role.gestor, Role.professor, Role.aluno}:
-        raise HTTPException(status_code=400, detail="Role invalida")
+    if payload.role not in {Role.gestor, Role.professor}:
+        raise HTTPException(status_code=400, detail="Use cadastro de alunos para role aluno")
 
     exists = await db.scalar(select(Usuario).where(Usuario.email == payload.login))
     if exists:
