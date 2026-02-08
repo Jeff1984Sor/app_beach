@@ -38,6 +38,7 @@ const tabelas = [
   { nome: "Contas Pagar", entidade: "contas_pagar" },
   { nome: "Movimentos Bancarios", entidade: "movimentos_bancarios" },
   { nome: "Regras Comissao", entidade: "regras_comissao" },
+  { nome: "Plano", entidade: "plano" },
   { nome: "Media Files", entidade: "media_files" },
   { nome: "Empresa Config", entidade: "empresa_config" }
 ];

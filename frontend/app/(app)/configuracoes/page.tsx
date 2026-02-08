@@ -19,6 +19,7 @@ type Entidade =
   | "contas_pagar"
   | "movimentos_bancarios"
   | "regras_comissao"
+  | "plano"
   | "media_files"
   | "empresa_config";
 
@@ -39,6 +40,7 @@ const LABELS: Record<Entidade, string> = {
   contas_pagar: "Contas a Pagar",
   movimentos_bancarios: "Movimentos Bancarios",
   regras_comissao: "Regras de Comissao",
+  plano: "Plano",
   media_files: "Media Files",
   empresa_config: "Empresa Config",
 };
@@ -59,6 +61,7 @@ const seed: Record<Entidade, Item[]> = {
   contas_pagar: [{ id: 1, titulo: "Aluguel Quadra", detalhe: "R$ 2.000", status: "ativo" }],
   movimentos_bancarios: [{ id: 1, titulo: "PIX recebido", detalhe: "R$ 550", status: "ativo" }],
   regras_comissao: [{ id: 1, titulo: "Professor", detalhe: "12%", status: "ativo" }],
+  plano: [{ id: 1, titulo: "Mensal Gold", detalhe: "R$ 380 | 30 dias | 3 aulas/sem", status: "ativo" }],
   media_files: [{ id: 1, titulo: "Logo Oficial", detalhe: "image/png", status: "ativo" }],
   empresa_config: [{ id: 1, titulo: "Beach Club", detalhe: "Cor primaria #0A84FF", status: "ativo" }],
 };
@@ -73,6 +76,9 @@ export default function ConfiguracoesPage() {
   const [titulo, setTitulo] = useState("");
   const [detalhe, setDetalhe] = useState("");
   const [status, setStatus] = useState<"ativo" | "inativo">("ativo");
+  const [planoValor, setPlanoValor] = useState("");
+  const [planoDuracao, setPlanoDuracao] = useState("");
+  const [planoAulas, setPlanoAulas] = useState("");
 
   const items = useMemo(() => data[entidade] || [], [data, entidade]);
   const title = LABELS[entidade] || "Configuracoes";
@@ -82,6 +88,9 @@ export default function ConfiguracoesPage() {
     setTitulo("");
     setDetalhe("");
     setStatus("ativo");
+    setPlanoValor("");
+    setPlanoDuracao("");
+    setPlanoAulas("");
     setOpen(true);
   }
 
@@ -90,18 +99,28 @@ export default function ConfiguracoesPage() {
     setTitulo(item.titulo);
     setDetalhe(item.detalhe);
     setStatus(item.status);
+    if (entidade === "plano") {
+      const parts = item.detalhe.split("|").map((x) => x.trim());
+      setPlanoValor(parts[0]?.replace("R$ ", "") || "");
+      setPlanoDuracao(parts[1]?.replace(" dias", "") || "");
+      setPlanoAulas(parts[2]?.replace(" aulas/sem", "") || "");
+    }
     setOpen(true);
   }
 
   function salvar() {
     setData((prev) => {
       const atual = [...prev[entidade]];
+      const detalheFinal =
+        entidade === "plano"
+          ? `R$ ${planoValor} | ${planoDuracao} dias | ${planoAulas} aulas/sem`
+          : detalhe;
       if (editId) {
         const idx = atual.findIndex((x) => x.id === editId);
-        if (idx >= 0) atual[idx] = { ...atual[idx], titulo, detalhe, status };
+        if (idx >= 0) atual[idx] = { ...atual[idx], titulo, detalhe: detalheFinal, status };
       } else {
         const nextId = Math.max(0, ...atual.map((x) => x.id)) + 1;
-        atual.unshift({ id: nextId, titulo, detalhe, status });
+        atual.unshift({ id: nextId, titulo, detalhe: detalheFinal, status });
       }
       return { ...prev, [entidade]: atual };
     });
@@ -162,13 +181,30 @@ export default function ConfiguracoesPage() {
 
               <div className="space-y-3">
                 <div className="space-y-1">
-                  <p className="text-xs font-medium uppercase tracking-wide text-muted">Nome</p>
-                  <Input value={titulo} onChange={(e) => setTitulo(e.target.value)} placeholder="Nome do item" />
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted">{entidade === "plano" ? "Plano" : "Nome"}</p>
+                  <Input value={titulo} onChange={(e) => setTitulo(e.target.value)} placeholder={entidade === "plano" ? "Nome do plano" : "Nome do item"} />
                 </div>
-                <div className="space-y-1">
-                  <p className="text-xs font-medium uppercase tracking-wide text-muted">Detalhe</p>
-                  <Input value={detalhe} onChange={(e) => setDetalhe(e.target.value)} placeholder="Descricao curta" />
-                </div>
+                {entidade === "plano" ? (
+                  <>
+                    <div className="space-y-1">
+                      <p className="text-xs font-medium uppercase tracking-wide text-muted">Valor</p>
+                      <Input value={planoValor} onChange={(e) => setPlanoValor(e.target.value)} placeholder="Ex: 380" />
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-xs font-medium uppercase tracking-wide text-muted">Duracao</p>
+                      <Input value={planoDuracao} onChange={(e) => setPlanoDuracao(e.target.value)} placeholder="Ex: 30 (dias)" />
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-xs font-medium uppercase tracking-wide text-muted">Quantidade de aulas semanais</p>
+                      <Input value={planoAulas} onChange={(e) => setPlanoAulas(e.target.value)} placeholder="Ex: 3" />
+                    </div>
+                  </>
+                ) : (
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted">Detalhe</p>
+                    <Input value={detalhe} onChange={(e) => setDetalhe(e.target.value)} placeholder="Descricao curta" />
+                  </div>
+                )}
                 <div className="space-y-1">
                   <p className="text-xs font-medium uppercase tracking-wide text-muted">Status</p>
                   <select value={status} onChange={(e) => setStatus(e.target.value as "ativo" | "inativo")} className="h-12 w-full rounded-2xl border border-border bg-white px-4 text-text outline-none">
