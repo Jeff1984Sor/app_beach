@@ -20,7 +20,11 @@ export default function NovoAlunoPage() {
   const [email, setEmail] = useState("");
   const [aniversario, setAniversario] = useState("");
   const [cep, setCep] = useState("");
-  const [endereco, setEndereco] = useState("");
+  const [logradouro, setLogradouro] = useState("");
+  const [numero, setNumero] = useState("");
+  const [bairro, setBairro] = useState("");
+  const [cidade, setCidade] = useState("");
+  const [uf, setUf] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
 
   async function buscarCep(cepValue: string) {
@@ -29,7 +33,10 @@ export default function NovoAlunoPage() {
     const res = await fetch(`${API_URL}/public/cep/${clean}`);
     if (!res.ok) return;
     const data = await res.json();
-    setEndereco(`${data.logradouro || ""}, ${data.bairro || ""} - ${data.cidade || ""}/${data.uf || ""}`.trim());
+    setLogradouro(data.logradouro || "");
+    setBairro(data.bairro || "");
+    setCidade(data.cidade || "");
+    setUf(data.uf || "");
   }
 
   async function salvar(e: React.FormEvent) {
@@ -47,7 +54,7 @@ export default function NovoAlunoPage() {
         email: email || null,
         data_aniversario: aniversario || null,
         cep: cep || null,
-        endereco: endereco || null,
+        endereco: [logradouro, numero, bairro, cidade, uf].filter(Boolean).join(", ") || null,
       }),
     });
     if (!res.ok) {
@@ -74,8 +81,23 @@ export default function NovoAlunoPage() {
               <Input className="pl-11" placeholder="E-mail (opcional)" value={email} onChange={(e) => setEmail(e.target.value)} />
             </div>
             <Input type="date" placeholder="Data de aniversario" value={aniversario} onChange={(e) => setAniversario(e.target.value)} />
-            <Input placeholder="CEP" value={cep} onChange={(e) => setCep(e.target.value)} onBlur={(e) => buscarCep(e.target.value)} />
-            <Input placeholder="Endereco" value={endereco} onChange={(e) => setEndereco(e.target.value)} />
+            <Input
+              placeholder="CEP"
+              value={cep}
+              onChange={(e) => {
+                const v = e.target.value;
+                setCep(v);
+                if (v.replace(/\D/g, "").length === 8) buscarCep(v);
+              }}
+              onBlur={(e) => buscarCep(e.target.value)}
+            />
+            <Input placeholder="Logradouro" value={logradouro} onChange={(e) => setLogradouro(e.target.value)} />
+            <Input placeholder="Numero" value={numero} onChange={(e) => setNumero(e.target.value)} />
+            <Input placeholder="Bairro" value={bairro} onChange={(e) => setBairro(e.target.value)} />
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Input placeholder="Cidade" value={cidade} onChange={(e) => setCidade(e.target.value)} />
+              <Input placeholder="UF" value={uf} onChange={(e) => setUf(e.target.value)} />
+            </div>
             {msg && <p className="text-sm text-danger">{msg}</p>}
             <Button className="w-full">Salvar</Button>
           </form>
