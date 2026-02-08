@@ -15,6 +15,17 @@ import { Modal } from "@/components/ui/modal";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
 
+function calcularIdade(dataIso: string): string {
+  if (!dataIso) return "";
+  const nasc = new Date(`${dataIso}T00:00:00`);
+  if (Number.isNaN(nasc.getTime())) return "";
+  const hoje = new Date();
+  let idade = hoje.getFullYear() - nasc.getFullYear();
+  const m = hoje.getMonth() - nasc.getMonth();
+  if (m < 0 || (m === 0 && hoje.getDate() < nasc.getDate())) idade--;
+  return idade >= 0 ? String(idade) : "";
+}
+
 async function fetchFicha(id: string) {
   const res = await fetch(`${API_URL}/alunos/${id}/ficha`, { cache: "no-store" });
   if (!res.ok) throw new Error("Falha ao carregar ficha");
@@ -31,7 +42,6 @@ export default function AlunoFichaPage() {
   const [email, setEmail] = useState("");
   const [telefone, setTelefone] = useState("");
   const [aniversario, setAniversario] = useState("");
-  const [idade, setIdade] = useState("");
   const [cep, setCep] = useState("");
   const [endereco, setEndereco] = useState("");
   const [unidade, setUnidade] = useState("Unidade Sul");
@@ -51,7 +61,6 @@ export default function AlunoFichaPage() {
     setEmail(data.email || "");
     setTelefone(data.telefone || "");
     setAniversario(data.data_aniversario || "");
-    setIdade(data.idade ? String(data.idade) : "");
     setCep(data.cep || "");
     setEndereco(data.endereco || "");
     setUnidade(data.unidade || "Unidade Sul");
@@ -63,7 +72,7 @@ export default function AlunoFichaPage() {
     await fetch(`${API_URL}/alunos/${data.id}/detalhes`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, telefone, data_aniversario: aniversario || null, idade: idade ? Number(idade) : null, cep: cep || null, endereco: endereco || null, unidade }),
+      body: JSON.stringify({ email, telefone, data_aniversario: aniversario || null, cep: cep || null, endereco: endereco || null, unidade }),
     });
     setOpenEdit(false);
     qc.invalidateQueries({ queryKey: ["aluno-ficha", params.id] });
@@ -87,7 +96,7 @@ export default function AlunoFichaPage() {
           <div>
             <h1 className="text-3xl font-semibold tracking-tight">{data.nome}</h1>
             <p className="mt-1 text-sm text-muted">{data.telefone || "Sem telefone"} • {data.unidade}</p>
-            <p className="mt-1 text-xs text-muted">Email: {data.email || "Nao informado"} • Aniversario: {data.data_aniversario || "Nao informado"} • Idade: {data.idade || "Nao informada"}</p>
+            <p className="mt-1 text-xs text-muted">Email: {data.email || "Nao informado"} • Aniversario: {data.data_aniversario || "Nao informado"} • Idade: {calcularIdade(data.data_aniversario || "") || "Nao informada"}</p>
             <p className="mt-1 text-xs text-muted">Endereco: {data.endereco || "Nao informado"}</p>
           </div>
           <div className="flex items-center gap-2">
@@ -119,7 +128,7 @@ export default function AlunoFichaPage() {
           <Input placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
           <div className="grid gap-3 sm:grid-cols-2">
             <Input type="date" placeholder="Data de aniversario" value={aniversario} onChange={(e) => setAniversario(e.target.value)} />
-            <Input placeholder="Idade" value={idade} onChange={(e) => setIdade(e.target.value)} />
+            <Input placeholder="Idade (calculada)" value={calcularIdade(aniversario)} readOnly />
           </div>
           <Input placeholder="CEP" value={cep} onChange={(e) => setCep(e.target.value)} />
           <Input placeholder="Endereco" value={endereco} onChange={(e) => setEndereco(e.target.value)} />
