@@ -18,7 +18,7 @@ export default function NovoAlunoPage() {
   const [login, setLogin] = useState("");
   const [telefone, setTelefone] = useState("");
   const [email, setEmail] = useState("");
-  const [aniversario, setAniversario] = useState("");
+  const [aniversario, setAniversario] = useState("");\n  const [idade, setIdade] = useState("");\n  const [unidade, setUnidade] = useState("Unidade Sul");
   const [cep, setCep] = useState("");
   const [logradouro, setLogradouro] = useState("");
   const [numero, setNumero] = useState("");
@@ -54,7 +54,7 @@ export default function NovoAlunoPage() {
         email: email || null,
         data_aniversario: aniversario || null,
         cep: cep || null,
-        endereco: [logradouro, numero, bairro, cidade, uf].filter(Boolean).join(", ") || null,
+        endereco: [logradouro, numero, bairro, cidade, uf].filter(Boolean).join(", ") || null,\n        idade: idade ? Number(idade) : null,\n        unidade,
       }),
     });
     if (!res.ok) {
@@ -80,7 +80,7 @@ export default function NovoAlunoPage() {
               <Mail size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-muted" />
               <Input className="pl-11" placeholder="E-mail (opcional)" value={email} onChange={(e) => setEmail(e.target.value)} />
             </div>
-            <Input type="date" placeholder="Data de aniversario" value={aniversario} onChange={(e) => setAniversario(e.target.value)} />
+            <div className="grid gap-3 sm:grid-cols-2">\n              <Input type="date" placeholder="Data de aniversario" value={aniversario} onChange={(e) => setAniversario(e.target.value)} />\n              <Input placeholder="Idade" value={idade} onChange={(e) => setIdade(e.target.value)} />\n            </div>\n            <select value={unidade} onChange={(e) => setUnidade(e.target.value)} className="h-12 w-full rounded-2xl border border-border bg-white px-4 text-text outline-none">\n              <option>Unidade Sul</option><option>Unidade Centro</option><option>Unidade Norte</option>\n            </select>
             <Input
               placeholder="CEP"
               value={cep}
@@ -106,3 +106,4 @@ export default function NovoAlunoPage() {
     </main>
   );
 }
+

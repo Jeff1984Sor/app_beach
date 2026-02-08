@@ -20,6 +20,8 @@ class AlunoCadastroIn(BaseModel):
     data_aniversario: str | None = None
     cep: str | None = None
     endereco: str | None = None
+    unidade: str | None = None
+    idade: int | None = None
     status: str = "ativo"
 
 
