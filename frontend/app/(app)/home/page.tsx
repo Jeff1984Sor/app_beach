@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useMemo } from "react";
-import { Settings } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Section } from "@/components/ui/section";
 import { useAuthStore } from "@/store/auth";
@@ -28,24 +27,6 @@ const mapRole: Record<string, Kpi[]> = {
   ]
 };
 
-const tabelas = [
-  { nome: "Usuarios", href: "/usuarios" },
-  { nome: "Alunos", href: "/alunos" },
-  { nome: "Unidades", href: "/configuracoes?entidade=unidades" },
-  { nome: "Agenda", href: "/agenda" },
-  { nome: "Aulas", href: "/configuracoes?entidade=aulas" },
-  { nome: "Contas Receber", href: "/configuracoes?entidade=contas_receber" },
-  { nome: "Contas Pagar", href: "/configuracoes?entidade=contas_pagar" },
-  { nome: "Movimentos Bancarios", href: "/configuracoes?entidade=movimentos_bancarios" },
-  { nome: "Regras Comissao", href: "/configuracoes?entidade=regras_comissao" },
-  { nome: "Plano", href: "/configuracoes?entidade=plano" },
-  { nome: "Categoria", href: "/configuracoes?entidade=categoria" },
-  { nome: "Subcategoria", href: "/configuracoes?entidade=subcategoria" },
-  { nome: "Modelo de Contrato", href: "/configuracoes?entidade=modelo_contrato" },
-  { nome: "Media Files", href: "/configuracoes?entidade=media_files" },
-  { nome: "Empresa Config", href: "/configuracoes?entidade=empresa_config" }
-];
-
 export default function HomePage() {
   const role = useAuthStore((s) => s.role) || "gestor";
   const nome = useAuthStore((s) => s.nome) || "Visitante";
@@ -55,18 +36,6 @@ export default function HomePage() {
     <main className="space-y-5">
       <header className="flex items-center justify-between">
         <p className="text-sm text-muted">Painel limpo</p>
-        <details className="relative">
-          <summary className="flex h-9 w-9 cursor-pointer list-none items-center justify-center rounded-xl border border-border bg-white text-muted shadow-soft">
-            <Settings size={16} />
-          </summary>
-          <div className="absolute right-0 z-20 mt-2 max-h-80 w-56 overflow-auto rounded-2xl border border-border bg-white p-2 shadow-soft">
-            {tabelas.map((item) => (
-              <Link key={item.nome} href={item.href} className="block rounded-xl px-3 py-2 text-sm text-text hover:bg-bg">
-                {item.nome}
-              </Link>
-            ))}
-          </div>
-        </details>
       </header>
 
       <Section title={`Ola, ${nome}`} subtitle={`Perfil ${role}`}>
