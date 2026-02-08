@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,12 +18,21 @@ export default function AgendaContratoPage() {
   const router = useRouter();
   const contratoId = search.get("contratoId");
   const horaQuery = search.get("hora");
+  const unidadeQuery = search.get("unidade");
   const [dias, setDias] = useState<string[]>(["Seg", "Qua", "Sex"]);
   const [horaInicio, setHoraInicio] = useState(horaQuery && horasCheias.includes(horaQuery) ? horaQuery : "18:00");
   const [duracao, setDuracao] = useState("60");
-  const [unidade, setUnidade] = useState("Unidade Sul");
+  const [unidade, setUnidade] = useState(unidadeQuery || "");
   const [erro, setErro] = useState("");
   const [salvando, setSalvando] = useState(false);
+  const { data: unidades = [] } = useQuery<{ id: number; nome: string }[]>({
+    queryKey: ["unidades"],
+    queryFn: async () => {
+      const res = await fetch(`${API_URL}/unidades`, { cache: "no-store" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+  });
 
   function toggleDia(dia: string) {
     setDias((prev) => (prev.includes(dia) ? prev.filter((d) => d !== dia) : [...prev, dia]));
@@ -81,9 +91,10 @@ export default function AgendaContratoPage() {
             </select>
             <Input type="number" min={30} step={30} placeholder="Duracao (min)" value={duracao} onChange={(e) => setDuracao(e.target.value)} />
             <select value={unidade} onChange={(e) => setUnidade(e.target.value)} className="h-12 w-full rounded-2xl border border-border bg-white px-4 text-text outline-none">
-              <option>Unidade Sul</option>
-              <option>Unidade Centro</option>
-              <option>Unidade Norte</option>
+              <option value="">Selecione a unidade</option>
+              {unidades.map((u) => (
+                <option key={u.id} value={u.nome}>{u.nome}</option>
+              ))}
             </select>
           </div>
           {erro && <p className="text-sm text-danger">{erro}</p>}

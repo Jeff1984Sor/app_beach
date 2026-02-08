@@ -51,9 +51,6 @@ async function fetchFicha(id: string) {
 
 const tabs = ["Aulas", "Financeiro", "Contratos", "WhatsApp"];
 type PlanoOption = { nome: string; valor: number; recorrencia: string; aulasSemanais: number };
-const planosFallback = [
-  { nome: "Mensal Gold", valor: 380, recorrencia: "mensal", aulasSemanais: 3 },
-];
 const horasCheias = Array.from({ length: 15 }, (_, i) => `${String(i + 7).padStart(2, "0")}:00`);
 
 export default function AlunoFichaPage() {
@@ -68,9 +65,9 @@ export default function AlunoFichaPage() {
   const [aniversario, setAniversario] = useState("");
   const [cep, setCep] = useState("");
   const [endereco, setEndereco] = useState("");
-  const [unidade, setUnidade] = useState("Unidade Sul");
+  const [unidade, setUnidade] = useState("");
   const [openContrato, setOpenContrato] = useState(false);
-  const [planoNome, setPlanoNome] = useState(planosFallback[0].nome);
+  const [planoNome, setPlanoNome] = useState("");
   const [recorrencia, setRecorrencia] = useState("mensal");
   const [valor, setValor] = useState("380");
   const [qtdAulas, setQtdAulas] = useState("3");
@@ -82,6 +79,14 @@ export default function AlunoFichaPage() {
   const [msgContrato, setMsgContrato] = useState<string>("");
 
   const { data, isLoading } = useQuery({ queryKey: ["aluno-ficha", params.id], queryFn: () => fetchFicha(params.id) });
+  const { data: unidades = [] } = useQuery<{ id: number; nome: string }[]>({
+    queryKey: ["unidades"],
+    queryFn: async () => {
+      const res = await fetch(`${API_URL}/unidades`, { cache: "no-store" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+  });
   const { data: planosApi = [] } = useQuery<any[]>({
     queryKey: ["planos-contrato"],
     queryFn: async () => {
@@ -92,7 +97,7 @@ export default function AlunoFichaPage() {
   });
   const planos = useMemo<PlanoOption[]>(
     () =>
-      (planosApi.length ? planosApi : planosFallback).map((p: any) => ({
+      planosApi.map((p: any) => ({
         nome: p.nome,
         valor: Number(p.valor || 0),
         recorrencia: String(p.recorrencia || "mensal"),
@@ -140,7 +145,7 @@ export default function AlunoFichaPage() {
     setAniversario(data.data_aniversario || "");
     setCep(data.cep || "");
     setEndereco(data.endereco || "");
-    setUnidade(data.unidade || "Unidade Sul");
+    setUnidade(data.unidade || "");
     setOpenEdit(true);
   }
 
@@ -180,6 +185,10 @@ export default function AlunoFichaPage() {
 
   async function criarContrato() {
     if (!data) return;
+    if (!planoNome) {
+      setMsgContrato("Cadastre e selecione um plano antes de salvar o contrato.");
+      return;
+    }
     setMsgContrato("");
     const url = editingContratoId
       ? `${API_URL}/alunos/${data.id}/contratos/${editingContratoId}`
@@ -221,7 +230,7 @@ export default function AlunoFichaPage() {
     setEditingContratoId(null);
     qc.invalidateQueries({ queryKey: ["aluno-ficha", params.id] });
     if (!editingContratoId && body?.contrato_id) {
-      router.push(`/alunos/${data.id}/agenda-contrato?contratoId=${body.contrato_id}&hora=${encodeURIComponent(horaAula)}`);
+      router.push(`/alunos/${data.id}/agenda-contrato?contratoId=${body.contrato_id}&hora=${encodeURIComponent(horaAula)}&unidade=${encodeURIComponent(data.unidade || "")}`);
       return;
     }
     setTab("Aulas");
@@ -322,7 +331,10 @@ export default function AlunoFichaPage() {
           />
           <Input placeholder="Endereco" value={endereco} onChange={(e) => setEndereco(e.target.value)} />
           <select value={unidade} onChange={(e) => setUnidade(e.target.value)} className="h-12 w-full rounded-2xl border border-border bg-white px-4 text-text outline-none">
-            <option>Unidade Sul</option><option>Unidade Centro</option><option>Unidade Norte</option>
+            <option value="">Selecione a unidade</option>
+            {unidades.map((u) => (
+              <option key={u.id} value={u.nome}>{u.nome}</option>
+            ))}
           </select>
           <Button className="w-full" onClick={salvarEdicao}>Salvar alteracoes</Button>
         </div>
@@ -332,6 +344,7 @@ export default function AlunoFichaPage() {
         <div className="space-y-3">
           <p className="text-xs font-medium uppercase tracking-wide text-muted">Plano</p>
           <select value={planoNome} onChange={(e) => selecionarPlano(e.target.value)} className="h-12 w-full rounded-2xl border border-border bg-white px-4 text-text outline-none">
+            <option value="">Selecione o plano</option>
             {planos.map((p) => (
               <option key={p.nome} value={p.nome}>{p.nome}</option>
             ))}

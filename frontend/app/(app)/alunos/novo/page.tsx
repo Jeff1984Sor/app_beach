@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
 import { Mail, MessageCircle } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -30,7 +31,7 @@ export default function NovoAlunoPage() {
   const [telefone, setTelefone] = useState("");
   const [email, setEmail] = useState("");
   const [aniversario, setAniversario] = useState("");
-  const [unidade, setUnidade] = useState("Unidade Sul");
+  const [unidade, setUnidade] = useState("");
   const [cep, setCep] = useState("");
   const [logradouro, setLogradouro] = useState("");
   const [numero, setNumero] = useState("");
@@ -40,6 +41,14 @@ export default function NovoAlunoPage() {
   const [msg, setMsg] = useState<string | null>(null);
 
   const idade = useMemo(() => calcularIdade(aniversario), [aniversario]);
+  const { data: unidades = [] } = useQuery<{ id: number; nome: string }[]>({
+    queryKey: ["unidades"],
+    queryFn: async () => {
+      const res = await fetch(`${API_URL}/unidades`, { cache: "no-store" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+  });
 
   async function buscarCep(cepValue: string) {
     const clean = cepValue.replace(/\D/g, "");
@@ -125,10 +134,11 @@ export default function NovoAlunoPage() {
               <Input placeholder="Idade (calculada)" value={idade} readOnly />
             </div>
 
-            <select value={unidade} onChange={(e) => setUnidade(e.target.value)} className="h-12 w-full rounded-2xl border border-border bg-white px-4 text-text outline-none">
-              <option>Unidade Sul</option>
-              <option>Unidade Centro</option>
-              <option>Unidade Norte</option>
+            <select value={unidade} onChange={(e) => setUnidade(e.target.value)} className="h-12 w-full rounded-2xl border border-border bg-white px-4 text-text outline-none" required>
+              <option value="">Selecione a unidade</option>
+              {unidades.map((u) => (
+                <option key={u.id} value={u.nome}>{u.nome}</option>
+              ))}
             </select>
 
             <Input
