@@ -60,6 +60,16 @@ async def create_financeiro(payload: FinanceiroIn, db: AsyncSession = Depends(ge
     return {"id": row.id}
 
 
+@router.delete("/financeiro/{movimento_id}")
+async def delete_financeiro(movimento_id: int, db: AsyncSession = Depends(get_db)):
+    row = await db.get(MovimentoBancario, movimento_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Movimento nao encontrado")
+    await db.delete(row)
+    await db.commit()
+    return {"ok": True}
+
+
 @router.post("/gerar-comissao")
 async def gerar_comissao_endpoint(db: AsyncSession = Depends(get_db)):
     return await gerar_comissao(db)

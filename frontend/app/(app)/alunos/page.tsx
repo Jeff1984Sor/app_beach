@@ -18,16 +18,12 @@ type AlunoItem = {
   unidade: string;
 };
 
-const alunosMock: AlunoItem[] = [
-  { id: 1, nome: "Ana Costa", telefone: "(71) 99999-1101", status: "ativo", unidade: "Unidade Sul" },
-  { id: 2, nome: "Jeff Santos", telefone: "(71) 99999-2250", status: "ativo", unidade: "Unidade Centro" },
-  { id: 3, nome: "Carla Nunes", telefone: "(71) 99999-8874", status: "inativo", unidade: "Unidade Sul" },
-  { id: 4, nome: "Rafa Gomes", telefone: "(71) 99999-7781", status: "ativo", unidade: "Unidade Norte" },
-];
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
 
 async function fetchAlunos(): Promise<AlunoItem[]> {
-  await new Promise((r) => setTimeout(r, 300));
-  return alunosMock;
+  const res = await fetch(`${API_URL}/alunos`, { cache: "no-store" });
+  if (!res.ok) throw new Error("Falha ao carregar alunos");
+  return res.json();
 }
 
 export default function AlunosPage() {
@@ -47,7 +43,7 @@ export default function AlunosPage() {
 
   const filtrados = useMemo(() => {
     return data.filter((a) => {
-      const bySearch = !debouncedSearch || a.nome.toLowerCase().includes(debouncedSearch) || a.telefone.toLowerCase().includes(debouncedSearch);
+      const bySearch = !debouncedSearch || a.nome.toLowerCase().includes(debouncedSearch) || (a.telefone || "").toLowerCase().includes(debouncedSearch);
       const byStatus = statusFilter === "todos" || a.status === statusFilter;
       const byUnidade = unidadeFilter === "todas" || a.unidade === unidadeFilter;
       return bySearch && byStatus && byUnidade;
@@ -60,12 +56,7 @@ export default function AlunosPage() {
         <div className="flex items-center justify-between gap-3">
           <div className="relative w-full">
             <Search size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-muted" />
-            <Input
-              className="h-12 pl-11"
-              placeholder="Buscar por nome ou telefone"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
+            <Input className="h-12 pl-11" placeholder="Buscar por nome ou telefone" value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
           <Link href="/alunos/novo" className="inline-flex h-10 items-center rounded-xl border border-border bg-white px-4 text-sm font-medium text-text shadow-soft">
             <Plus size={14} className="mr-1" /> Novo Aluno
@@ -87,9 +78,7 @@ export default function AlunosPage() {
       </Section>
 
       <section className="space-y-3">
-        {isLoading && Array.from({ length: 4 }).map((_, i) => (
-          <Card key={i} className="h-24 animate-pulse bg-white/90" />
-        ))}
+        {isLoading && Array.from({ length: 4 }).map((_, i) => <Card key={i} className="h-24 animate-pulse bg-white/90" />)}
 
         {!isLoading && filtrados.map((aluno) => (
           <Link key={aluno.id} href={`/alunos/${aluno.id}`}>
@@ -97,7 +86,7 @@ export default function AlunosPage() {
               <Card className="flex items-center justify-between p-5 transition hover:shadow-md">
                 <div className="space-y-1">
                   <p className="text-lg font-semibold text-text">{aluno.nome}</p>
-                  <p className="text-sm text-muted">{aluno.telefone}</p>
+                  <p className="text-sm text-muted">{aluno.telefone || "Sem telefone"}</p>
                   <div className="flex items-center gap-2">
                     <Badge tone={aluno.status === "ativo" ? "success" : "danger"}>{aluno.status}</Badge>
                     <span className="text-xs text-muted">{aluno.unidade}</span>

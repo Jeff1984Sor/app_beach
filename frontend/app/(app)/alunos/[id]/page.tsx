@@ -10,45 +10,12 @@ import { Card } from "@/components/ui/card";
 import { Section } from "@/components/ui/section";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 
-type Aula = { id: number; data: string; hora: string; unidade: string; status: "confirmada" | "pendente" | "cancelada" };
-type Fatura = { id: number; valor: string; status: "aberto" | "pago"; vencimento: string };
-type Contrato = { id: number; plano: string; inicio: string; fim: string; status: string };
-type Msg = { id: number; texto: string; status: "enviado" | "entregue" | "lida"; quando: string };
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
 
-type AlunoFicha = {
-  id: number;
-  nome: string;
-  status: "ativo" | "inativo";
-  telefone: string;
-  unidade: string;
-  aulas: Aula[];
-  financeiro: Fatura[];
-  contratos: Contrato[];
-  mensagens: Msg[];
-};
-
-async function fetchFicha(id: string): Promise<AlunoFicha> {
-  await new Promise((r) => setTimeout(r, 500));
-  return {
-    id: Number(id),
-    nome: id === "2" ? "Jeff Santos" : "Ana Costa",
-    status: "ativo",
-    telefone: "(71) 99999-1101",
-    unidade: "Unidade Sul",
-    aulas: [
-      { id: 1, data: "10/02/2026", hora: "08:00", unidade: "Unidade Sul", status: "confirmada" },
-      { id: 2, data: "12/02/2026", hora: "09:30", unidade: "Unidade Sul", status: "pendente" },
-    ],
-    financeiro: [
-      { id: 1, valor: "R$ 380,00", status: "aberto", vencimento: "10/02/2026" },
-      { id: 2, valor: "R$ 380,00", status: "pago", vencimento: "10/01/2026" },
-    ],
-    contratos: [{ id: 1, plano: "Mensal Gold", inicio: "01/02/2026", fim: "29/02/2026", status: "Ativo" }],
-    mensagens: [
-      { id: 1, texto: "Confirmando aula de amanha as 08:00.", status: "lida", quando: "Hoje 10:21" },
-      { id: 2, texto: "Perfeito, estarei presente.", status: "entregue", quando: "Hoje 10:24" },
-    ],
-  };
+async function fetchFicha(id: string) {
+  const res = await fetch(`${API_URL}/alunos/${id}/ficha`, { cache: "no-store" });
+  if (!res.ok) throw new Error("Falha ao carregar ficha");
+  return res.json();
 }
 
 const tabs = ["Aulas", "Financeiro", "Contratos", "WhatsApp"];
@@ -60,11 +27,22 @@ export default function AlunoFichaPage() {
 
   const resumoFinanceiro = useMemo(() => {
     if (!data) return { aberto: "R$ 0", pago: "R$ 0", proximo: "--" };
-    const aberto = data.financeiro.filter((x) => x.status === "aberto").length * 380;
-    const pago = data.financeiro.filter((x) => x.status === "pago").length * 380;
-    const prox = data.financeiro.find((x) => x.status === "aberto")?.vencimento || "--";
-    return { aberto: `R$ ${aberto},00`, pago: `R$ ${pago},00`, proximo: prox };
+    const aberto = data.financeiro.filter((x: any) => x.status === "aberto").reduce((a: number, b: any) => a + Number(b.valor), 0);
+    const pago = data.financeiro.filter((x: any) => x.status === "pago").reduce((a: number, b: any) => a + Number(b.valor), 0);
+    const prox = data.financeiro.find((x: any) => x.status === "aberto")?.vencimento || "--";
+    return { aberto: `R$ ${aberto.toFixed(2)}`, pago: `R$ ${pago.toFixed(2)}`, proximo: prox };
   }, [data]);
+
+  async function visualizarContrato() {
+    if (!data) return;
+    const res = await fetch(`${API_URL}/alunos/${data.id}/gerar-contrato`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ plano_nome: "Plano Mensal", plano_valor: "R$ 380,00", plano_duracao: "Mensal", plano_qtd_aulas_semanais: "3" }),
+    });
+    const contrato = await res.json();
+    alert(contrato.conteudo || "Contrato gerado");
+  }
 
   if (isLoading || !data) {
     return (
@@ -82,7 +60,7 @@ export default function AlunoFichaPage() {
         <div className="flex items-start justify-between">
           <div>
             <h1 className="text-3xl font-semibold tracking-tight">{data.nome}</h1>
-            <p className="mt-1 text-sm text-muted">{data.telefone} • {data.unidade}</p>
+            <p className="mt-1 text-sm text-muted">{data.telefone || "Sem telefone"} • {data.unidade}</p>
           </div>
           <Badge tone={data.status === "ativo" ? "success" : "danger"}>{data.status}</Badge>
         </div>
@@ -100,16 +78,15 @@ export default function AlunoFichaPage() {
           {tab === "Aulas" && (
             <Section title="Aulas">
               <div className="space-y-3">
-                {data.aulas.map((a) => (
+                {data.aulas.map((a: any) => (
                   <Card key={a.id} className="flex items-center justify-between p-4">
                     <div>
                       <p className="font-semibold">{a.data} • {a.hora}</p>
                       <p className="text-sm text-muted">{a.unidade}</p>
                     </div>
-                    <Badge tone={a.status === "confirmada" ? "success" : a.status === "pendente" ? "default" : "danger"}>{a.status}</Badge>
+                    <Badge tone={a.status === "confirmada" || a.status === "realizada" ? "success" : a.status === "pendente" ? "default" : "danger"}>{a.status}</Badge>
                   </Card>
                 ))}
-                <button className="rounded-2xl bg-primary px-4 py-3 text-sm font-semibold text-white">+ Nova Aula</button>
               </div>
             </Section>
           )}
@@ -122,10 +99,10 @@ export default function AlunoFichaPage() {
                 <Card><p className="text-sm text-muted">Proximo vencimento</p><p className="text-2xl font-semibold">{resumoFinanceiro.proximo}</p></Card>
               </div>
               <div className="mt-3 space-y-3">
-                {data.financeiro.map((f) => (
+                {data.financeiro.map((f: any) => (
                   <Card key={f.id} className="flex items-center justify-between p-4">
                     <div>
-                      <p className="text-xl font-semibold">{f.valor}</p>
+                      <p className="text-xl font-semibold">R$ {Number(f.valor).toFixed(2)}</p>
                       <p className="text-sm text-muted">Vencimento: {f.vencimento}</p>
                     </div>
                     <Badge tone={f.status === "pago" ? "success" : "danger"}>{f.status}</Badge>
@@ -138,13 +115,13 @@ export default function AlunoFichaPage() {
           {tab === "Contratos" && (
             <Section title="Contratos">
               <div className="space-y-3">
-                {data.contratos.map((c) => (
+                {data.contratos.map((c: any) => (
                   <Card key={c.id} className="space-y-2 p-4">
                     <p className="text-lg font-semibold">{c.plano}</p>
                     <p className="text-sm text-muted">Inicio: {c.inicio} • Fim: {c.fim}</p>
                     <div className="flex items-center justify-between">
                       <Badge tone="success">{c.status}</Badge>
-                      <button className="rounded-xl border border-border px-3 py-2 text-sm">Visualizar contrato</button>
+                      <button onClick={visualizarContrato} className="rounded-xl border border-border px-3 py-2 text-sm">Visualizar contrato</button>
                     </div>
                   </Card>
                 ))}
@@ -155,7 +132,7 @@ export default function AlunoFichaPage() {
           {tab === "WhatsApp" && (
             <Section title="WhatsApp">
               <div className="space-y-3">
-                {data.mensagens.map((m) => (
+                {data.mensagens.map((m: any) => (
                   <Card key={m.id} className="space-y-1 p-4">
                     <p className="text-sm">{m.texto}</p>
                     <div className="flex items-center justify-between text-xs text-muted">
