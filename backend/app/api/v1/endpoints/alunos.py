@@ -210,21 +210,20 @@ async def slot_em_conflito(
     fim_br = fim_dt.astimezone(BR_TZ) if getattr(fim_dt, "tzinfo", None) else fim_dt.replace(tzinfo=timezone.utc).astimezone(BR_TZ)
 
     await ensure_bloqueios_table(db)
-    rows = (
-        await db.execute(
-            text(
-                """
-                SELECT hora_inicio, hora_fim
-                FROM agenda_bloqueios
-                WHERE data = :data
-                  AND LOWER(COALESCE(status, 'ativo')) = 'ativo'
-                  AND (profissional_id IS NULL OR profissional_id = :profissional_id)
-                  AND (:unidade_id IS NULL OR unidade_id IS NULL OR unidade_id = :unidade_id)
-                """
-            ),
-            {"data": inicio_br.date(), "profissional_id": professor_id, "unidade_id": unidade_id},
-        )
-    ).all()
+    # Evita AmbiguousParameterError do asyncpg quando usa ":param IS NULL" em SQL raw.
+    sql = """
+        SELECT hora_inicio, hora_fim
+        FROM agenda_bloqueios
+        WHERE data = :data
+          AND LOWER(COALESCE(status, 'ativo')) = 'ativo'
+          AND (profissional_id IS NULL OR profissional_id = :profissional_id)
+    """
+    params: dict = {"data": inicio_br.date(), "profissional_id": professor_id}
+    if unidade_id is not None:
+        sql += " AND (unidade_id IS NULL OR unidade_id = :unidade_id)"
+        params["unidade_id"] = int(unidade_id)
+
+    rows = (await db.execute(text(sql), params)).all()
     inicio_min = inicio_br.hour * 60 + inicio_br.minute
     fim_min = fim_br.hour * 60 + fim_br.minute
     for r in rows:
