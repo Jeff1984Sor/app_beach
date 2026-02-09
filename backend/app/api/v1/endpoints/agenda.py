@@ -91,6 +91,8 @@ async def listar_agenda(data: date | None = None, profissional_id: int | None = 
             func.coalesce(Usuario.nome, "Sem professor").label("professor_nome"),
             Aula.aluno_id,
             func.coalesce(Unidade.nome, "").label("unidade_nome"),
+            func.to_char(func.timezone(BR_TZ_NAME, Aula.inicio), "DD/MM/YYYY").label("data_br"),
+            func.to_char(func.timezone(BR_TZ_NAME, Aula.inicio), "HH24:MI").label("hora_br"),
         )
         .join(Agenda, Aula.agenda_id == Agenda.id, isouter=True)
         .join(Profissional, Profissional.id == Aula.professor_id, isouter=True)
@@ -137,6 +139,8 @@ async def listar_agenda(data: date | None = None, profissional_id: int | None = 
                 "professor_nome": r[5],
                 "aluno_id": r[6],
                 "unidade": r[7] or "",
+                "data_br": r[8],
+                "hora_br": r[9],
             }
             for r in aulas_rows
         ],
@@ -178,6 +182,8 @@ async def listar_agenda_periodo(
             Aula.aluno_id,
             func.coalesce(Unidade.nome, "").label("unidade_nome"),
             func.date(Aula.inicio).label("data"),
+            func.to_char(func.timezone(BR_TZ_NAME, Aula.inicio), "DD/MM/YYYY").label("data_br"),
+            func.to_char(func.timezone(BR_TZ_NAME, Aula.inicio), "HH24:MI").label("hora_br"),
         )
         .join(Agenda, Aula.agenda_id == Agenda.id, isouter=True)
         .join(Profissional, Profissional.id == Aula.professor_id, isouter=True)
@@ -225,6 +231,8 @@ async def listar_agenda_periodo(
                 "aluno_id": r[6],
                 "unidade": r[7] or "",
                 "data": r[8].strftime("%Y-%m-%d") if r[8] else None,
+                "data_br": r[9],
+                "hora_br": r[10],
             }
             for r in aulas_rows
         ],

@@ -25,6 +25,8 @@ type AulaApi = {
   professor_nome: string;
   unidade: string;
   aluno_id?: number;
+  data_br?: string;
+  hora_br?: string;
 };
 type BloqueioApi = {
   id: number;
@@ -292,7 +294,7 @@ export default function AgendaPage() {
           <Card key={a.id} className="flex items-center justify-between gap-3 p-4">
             <div className="min-w-0">
               <p className="text-lg font-semibold text-primary">
-                {formatDateTimeBR(a.inicio).data} - {formatDateTimeBR(a.inicio).hora}
+                {(a.data_br && a.hora_br) ? `${a.data_br} - ${a.hora_br}` : `${formatDateTimeBR(a.inicio).data} - ${formatDateTimeBR(a.inicio).hora}`}
               </p>
               <p className="truncate font-medium">{a.professor_nome}</p>
               <p className="truncate text-sm text-muted">{a.unidade}</p>
