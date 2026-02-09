@@ -1,4 +1,5 @@
-﻿from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 import calendar
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -196,6 +197,11 @@ async def slot_em_conflito(db: AsyncSession, professor_id: int, inicio_dt: datet
     if conflito_aula:
         return "Conflito: professor ja possui aula nesse horario"
 
+    # Bloqueios sao cadastrados em horario local do Brasil (America/Sao_Paulo).
+    # Como armazenamos aulas em UTC (timestamptz), convertemos para BR antes de comparar.
+    inicio_br = inicio_dt.astimezone(BR_TZ) if getattr(inicio_dt, "tzinfo", None) else inicio_dt.replace(tzinfo=timezone.utc).astimezone(BR_TZ)
+    fim_br = fim_dt.astimezone(BR_TZ) if getattr(fim_dt, "tzinfo", None) else fim_dt.replace(tzinfo=timezone.utc).astimezone(BR_TZ)
+
     await ensure_bloqueios_table(db)
     rows = (
         await db.execute(
@@ -204,15 +210,15 @@ async def slot_em_conflito(db: AsyncSession, professor_id: int, inicio_dt: datet
                 SELECT hora_inicio, hora_fim
                 FROM agenda_bloqueios
                 WHERE data = :data
-                  AND LOWER(COALESCE(status, 'ativo')) = 'ativo'
+                  AND LOWER(COALESCE(status, \"ativo\")) = \"ativo\"
                   AND (profissional_id IS NULL OR profissional_id = :profissional_id)
                 """
             ),
-            {"data": inicio_dt.date(), "profissional_id": professor_id},
+            {"data": inicio_br.date(), "profissional_id": professor_id},
         )
     ).all()
-    inicio_min = inicio_dt.hour * 60 + inicio_dt.minute
-    fim_min = fim_dt.hour * 60 + fim_dt.minute
+    inicio_min = inicio_br.hour * 60 + inicio_br.minute
+    fim_min = fim_br.hour * 60 + fim_br.minute
     for r in rows:
         try:
             hi_h, hi_m = str(r[0]).split(":")
@@ -225,7 +231,6 @@ async def slot_em_conflito(db: AsyncSession, professor_id: int, inicio_dt: datet
             return "Conflito: horario bloqueado na agenda do professor"
     return None
 
-
 def gerar_horas_cheias(inicio_h: int = 7, fim_h: int = 21) -> list[str]:
     return [f"{h:02d}:00" for h in range(inicio_h, fim_h + 1)]
 
@@ -235,7 +240,7 @@ async def listar_horarios_disponiveis(db: AsyncSession, professor_id: int, data_
     livres: list[str] = []
     for hhmm in horas:
         hh, mm = hhmm.split(":")
-        ini = datetime(data_ref.year, data_ref.month, data_ref.day, int(hh), int(mm))
+        ini = br_local_to_utc(data_ref, hhmm)
         fim = ini + timedelta(minutes=max(30, duracao_min))
         conflito = await slot_em_conflito(db, professor_id, ini, fim)
         if not conflito:
@@ -254,6 +259,20 @@ def add_months(base: date, months: int) -> date:
 def recorrencia_to_meses(recorrencia: str) -> int:
     mapa = {"mensal": 1, "trimestral": 3, "semestral": 6, "anual": 12}
     return mapa.get((recorrencia or "").lower(), 1)
+
+
+BR_TZ = ZoneInfo("America/Sao_Paulo")
+
+
+def br_local_to_utc(data_base: date, hhmm: str) -> datetime:
+    """Interpreta data+hora como America/Sao_Paulo e converte para UTC para salvar em timestamptz."""
+    try:
+        hh, mm = (hhmm or "").split(":")
+        local_dt = datetime(data_base.year, data_base.month, data_base.day, int(hh), int(mm), tzinfo=BR_TZ)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Hora invalida, use HH:MM")
+    return local_dt.astimezone(timezone.utc)
+
 
 
 def dia_label_to_weekday(dia: str) -> int | None:
@@ -686,14 +705,7 @@ async def criar_reservas_contrato(aluno_id: int, contrato_id: int, payload: dict
     if not prof:
         raise HTTPException(status_code=400, detail="Cadastre ao menos um profissional para reservar agenda")
 
-    try:
-        h, m = (hora_inicio_txt or "18:00").split(":")
-        hour = int(h)
-        minute = int(m)
-    except Exception:
-        raise HTTPException(status_code=400, detail="Hora invalida, use HH:MM")
-
-    inicio_periodo = contrato[1]
+        inicio_periodo = contrato[1]
     fim_periodo = contrato[2]
     valor = float(contrato[3] or 0)
     aulas_criadas = 0
@@ -708,7 +720,7 @@ async def criar_reservas_contrato(aluno_id: int, contrato_id: int, payload: dict
                 db.add(agenda)
                 await db.flush()
 
-            inicio_dt = datetime(data_cursor.year, data_cursor.month, data_cursor.day, hour, minute)
+            inicio_dt = br_local_to_utc(data_cursor, hora_inicio_txt)
             fim_dt = inicio_dt + timedelta(minutes=duracao_min)
             existe = await db.scalar(
                 select(Aula).where(
@@ -787,8 +799,7 @@ async def criar_aula_avulsa(aluno_id: int, payload: dict, db: AsyncSession = Dep
 
     try:
         data_ref = datetime.strptime(data_txt, "%Y-%m-%d").date()
-        hh, mm = hora_txt.split(":")
-        ini = datetime(data_ref.year, data_ref.month, data_ref.day, int(hh), int(mm))
+        ini = br_local_to_utc(data_ref, hora_txt)
     except Exception:
         raise HTTPException(status_code=400, detail="Data/hora invalida")
 
@@ -848,8 +859,7 @@ async def reagendar_aula(aluno_id: int, aula_id: int, payload: dict, db: AsyncSe
 
     try:
         data_base = datetime.strptime(data_txt, "%Y-%m-%d").date()
-        hh, mm = hora_txt.split(":")
-        novo_inicio = datetime(data_base.year, data_base.month, data_base.day, int(hh), int(mm))
+        novo_inicio = br_local_to_utc(data_base, hora_txt)
     except Exception:
         raise HTTPException(status_code=400, detail="Formato invalido. Use data YYYY-MM-DD e hora HH:MM")
 

@@ -9,6 +9,8 @@ from app.models.entities import Agenda, Aula, Profissional, Unidade, Usuario
 
 router = APIRouter(prefix="/agenda", tags=["agenda"])
 
+BR_TZ_NAME = "America/Sao_Paulo"
+
 
 async def ensure_bloqueios_table(db: AsyncSession):
     await db.execute(
@@ -94,8 +96,8 @@ async def listar_agenda(data: date | None = None, profissional_id: int | None = 
         .join(Profissional, Profissional.id == Aula.professor_id, isouter=True)
         .join(Usuario, Usuario.id == Profissional.usuario_id, isouter=True)
         .join(Unidade, Unidade.id == Agenda.unidade_id, isouter=True)
-        # Use the timestamp itself as source-of-truth; tolerate orphaned agenda_id rows.
-        .where(func.date(Aula.inicio) == dia)
+        # Stored as timestamptz (UTC). Filter by Brazil-local date.
+        .where(func.date(func.timezone(BR_TZ_NAME, Aula.inicio)) == dia)
         .order_by(Aula.inicio.asc())
     )
     if profissional_id:
@@ -181,7 +183,7 @@ async def listar_agenda_periodo(
         .join(Profissional, Profissional.id == Aula.professor_id, isouter=True)
         .join(Usuario, Usuario.id == Profissional.usuario_id, isouter=True)
         .join(Unidade, Unidade.id == Agenda.unidade_id, isouter=True)
-        .where(func.date(Aula.inicio).between(data_inicio, data_fim))
+        .where(func.date(func.timezone(BR_TZ_NAME, Aula.inicio)).between(data_inicio, data_fim))
         .order_by(Aula.inicio.asc())
     )
     if profissional_id:
