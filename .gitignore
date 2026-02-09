@@ -8,6 +8,7 @@ backend/.env
 frontend/node_modules/
 frontend/.next/
 frontend/public/workbox-*.js
+frontend/public/sw.js
 
 # OS
 .DS_Store

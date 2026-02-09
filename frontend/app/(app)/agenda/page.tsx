@@ -131,7 +131,12 @@ export default function AgendaPage() {
 
       const qs = new URLSearchParams({ data_inicio: ini, data_fim: fim });
       if (professorId !== "todos") qs.set("profissional_id", professorId);
-      const res = await fetch(`${API_URL}/agenda/periodo?${qs.toString()}`, { cache: "no-store" });
+      // Cache-buster: avoids stale responses when PWA service worker is enabled.
+      qs.set("_ts", String(Date.now()));
+      const res = await fetch(`${API_URL}/agenda/periodo?${qs.toString()}`, {
+        cache: "no-store",
+        headers: { "Cache-Control": "no-store" },
+      });
       if (!res.ok) return { aulas: [], bloqueios: [] };
       const body = await res.json();
       return {

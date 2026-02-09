@@ -15,7 +15,6 @@ type Entidade =
   | "alunos"
   | "unidades"
   | "agenda"
-  | "aulas"
   | "contas_receber"
   | "contas_pagar"
   | "movimentos_bancarios"
@@ -96,7 +95,6 @@ const LABELS: Record<Entidade, string> = {
   alunos: "Alunos",
   unidades: "Unidades",
   agenda: "Agenda",
-  aulas: "Aulas",
   contas_receber: "Contas a Receber",
   contas_pagar: "Contas a Pagar",
   movimentos_bancarios: "Movimentos Bancarios",
@@ -120,7 +118,6 @@ export default function ConfiguracoesPage() {
     "alunos",
     "unidades",
     "agenda",
-    "aulas",
     "contas_receber",
     "contas_pagar",
     "movimentos_bancarios",

@@ -17,7 +17,6 @@ const tabelas = [
   { nome: "Alunos", href: "/alunos" },
   { nome: "Unidades", href: "/configuracoes?entidade=unidades" },
   { nome: "Agenda", href: "/agenda" },
-  { nome: "Aulas", href: "/configuracoes?entidade=aulas" },
   { nome: "Contas Receber", href: "/configuracoes?entidade=contas_receber" },
   { nome: "Contas Pagar", href: "/configuracoes?entidade=contas_pagar" },
   { nome: "Movimentos Bancarios", href: "/configuracoes?entidade=movimentos_bancarios" },
