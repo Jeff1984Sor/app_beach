@@ -584,7 +584,12 @@ export default function AlunoFichaPage() {
                         />
                         <div>
                           <p className="font-semibold">{a.data} • {a.hora}</p>
-                          <p className="text-sm text-muted">{a.unidade}</p>
+                          <p className="text-sm text-muted">
+                            {a.unidade}
+                            {a.professor_nome ? (
+                              <span className="text-muted">{` • Prof: ${a.professor_nome}`}</span>
+                            ) : null}
+                          </p>
                         </div>
                       </div>
                       <Badge tone={aulaStatusMeta(a.status).tone}>{aulaStatusMeta(a.status).label}</Badge>
@@ -611,7 +616,9 @@ export default function AlunoFichaPage() {
                       >
                         <MinusCircle size={16} className="mr-2 inline" /> Falta
                       </button>
-                      <button onClick={() => abrirReagendar(a)} className="rounded-xl border border-border px-3 py-2 text-sm text-text hover:bg-bg">Reagendar</button>
+                      <button onClick={() => abrirReagendar(a)} className="rounded-xl border border-border px-3 py-2 text-sm text-text hover:bg-bg">
+                        <Pencil size={16} className="mr-2 inline" /> Alterar
+                      </button>
                       <button onClick={() => deletarAula(a.id)} className="rounded-xl border border-border px-3 py-2 text-sm text-danger hover:bg-danger/10">Deletar</button>
                     </div>
                   </Card>

@@ -318,8 +318,23 @@ async def ficha_aluno(aluno_id: int, db: AsyncSession = Depends(get_db)):
 
     aluno, user = row
     d = await get_details(db, aluno.id)
-    # Proxima aula primeiro (ordenacao asc). Realizadas/canceladas tendem a ficar no fim naturalmente pelo horario.
-    aulas = (await db.execute(select(Aula).where(Aula.aluno_id == aluno_id).order_by(Aula.inicio.asc()).limit(50))).scalars().all()
+    # Proxima aula primeiro (ordenacao asc). Inclui o nome do professor para UI premium.
+    aulas_rows = (
+        await db.execute(
+            text(
+                """
+                SELECT a.id, a.inicio, a.status, a.professor_id, COALESCE(u.nome, '') AS professor_nome
+                FROM aulas a
+                LEFT JOIN profissionais p ON p.id = a.professor_id
+                LEFT JOIN usuarios u ON u.id = p.usuario_id
+                WHERE a.aluno_id = :aluno_id
+                ORDER BY a.inicio ASC
+                LIMIT 50
+                """
+            ),
+            {"aluno_id": aluno_id},
+        )
+    ).all()
     financeiro = (await db.execute(select(ContaReceber).where(ContaReceber.aluno_id == aluno_id).order_by(ContaReceber.vencimento.desc()).limit(20))).scalars().all()
     contratos_rows = (
         await db.execute(
@@ -354,13 +369,15 @@ async def ficha_aluno(aluno_id: int, db: AsyncSession = Depends(get_db)):
         "unidade": d.get("unidade") or "Nao definida",
         "aulas": [
             {
-                "id": a.id,
-                "data": a.inicio.strftime("%d/%m/%Y") if a.inicio else "--",
-                "hora": a.inicio.strftime("%H:%M") if a.inicio else "--",
+                "id": a[0],
+                "data": a[1].strftime("%d/%m/%Y") if a[1] else "--",
+                "hora": a[1].strftime("%H:%M") if a[1] else "--",
                 "unidade": d.get("unidade") or "Nao definida",
-                "status": a.status,
+                "status": a[2],
+                "professor_id": a[3],
+                "professor_nome": a[4] or "",
             }
-            for a in aulas
+            for a in aulas_rows
         ],
         "financeiro": [
             {
