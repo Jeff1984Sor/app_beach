@@ -8,6 +8,7 @@ import { cn } from "@/lib/cn";
 
 const items = [
   { href: "/home", label: "Home" },
+  { href: "/alunos", label: "Alunos" },
   { href: "/agenda", label: "Agenda" },
   { href: "/financeiro", label: "Financeiro" },
 ];
