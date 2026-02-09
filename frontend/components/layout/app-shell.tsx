@@ -19,7 +19,6 @@ const tabelas = [
   { nome: "Agenda", href: "/agenda" },
   { nome: "Contas Receber", href: "/configuracoes?entidade=contas_receber" },
   { nome: "Contas Pagar", href: "/configuracoes?entidade=contas_pagar" },
-  { nome: "Movimentos Bancarios", href: "/configuracoes?entidade=movimentos_bancarios" },
   { nome: "Regras Comissao", href: "/configuracoes?entidade=regras_comissao" },
   { nome: "Plano", href: "/configuracoes?entidade=plano" },
   { nome: "Conta Bancaria", href: "/configuracoes?entidade=conta_bancaria" },
