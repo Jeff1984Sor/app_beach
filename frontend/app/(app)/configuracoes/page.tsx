@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, Pencil, Trash2, X } from "lucide-react";
+import { CheckCircle2, Plus, Trash2, X } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Section } from "@/components/ui/section";
 import { Input } from "@/components/ui/input";
@@ -189,6 +189,10 @@ export default function ConfiguracoesPage() {
   const [regraTipo, setRegraTipo] = useState<"percentual" | "valor_aula">("percentual");
   const [regraPercentual, setRegraPercentual] = useState("");
   const [regraValorAula, setRegraValorAula] = useState("");
+  const [payOpen, setPayOpen] = useState(false);
+  const [payContaId, setPayContaId] = useState<number | null>(null);
+  const [payDataPagamento, setPayDataPagamento] = useState(new Date().toISOString().slice(0, 10));
+  const [payContaBancariaId, setPayContaBancariaId] = useState<string>("");
   const [contratoTexto, setContratoTexto] = useState(`CONTRATO DE PRESTACAO DE SERVICOS - BEACH TENNIS
 
 CONTRATANTE:
@@ -251,7 +255,7 @@ CONTRATADA: ______________________`);
       if (!res.ok) return [];
       return res.json();
     },
-    enabled: entidade === "conta_bancaria",
+    enabled: entidade === "conta_bancaria" || entidade === "contas_receber",
   });
   const { data: unidadesApi = [] } = useQuery<UnidadeApi[]>({
     queryKey: ["unidades-config"],
@@ -529,6 +533,36 @@ CONTRATADA: ______________________`);
     setOpen(true);
   }
 
+  function openPagarContaReceber(id: number) {
+    setPayContaId(id);
+    setPayDataPagamento(new Date().toISOString().slice(0, 10));
+    setPayContaBancariaId("");
+    setPayOpen(true);
+  }
+
+  async function confirmarPagamentoContaReceber() {
+    if (!payContaId) return;
+    const payload = {
+      data_pagamento: payDataPagamento,
+      conta_bancaria_id: payContaBancariaId ? Number(payContaBancariaId) : null,
+    };
+    const res = await fetch(`${API_URL}/contas-receber/${payContaId}/pagar`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (res.ok) {
+      qc.invalidateQueries({ queryKey: ["contas-receber-config"] });
+      qc.invalidateQueries({ queryKey: ["movimentacoes-financeiras-config"] });
+      qc.invalidateQueries({ queryKey: ["contas-bancarias-config"] });
+      setPayOpen(false);
+      setPayContaId(null);
+    } else {
+      const err = await res.json().catch(() => ({}));
+      window.alert(err.detail || "Falha ao dar baixa no recebimento.");
+    }
+  }
+
   async function salvar() {
     if (entidade === "plano") {
       const payload = {
@@ -739,9 +773,36 @@ CONTRATADA: ______________________`);
                 </span>
                 {entidade !== "movimentacoes_financeiras" && (
                   <>
-                    <button onClick={() => openEditar(item)} className="rounded-xl border border-border p-2 text-muted transition hover:bg-bg hover:text-text" aria-label="Editar">
-                      <Pencil size={16} />
-                    </button>
+                    {entidade === "contas_receber" ? (
+                      <button
+                        onClick={() => openPagarContaReceber(item.id)}
+                        className="rounded-xl border border-border p-2 text-success transition hover:bg-success/10"
+                        aria-label="Dar como paga"
+                        title="Dar como paga"
+                      >
+                        <CheckCircle2 size={16} />
+                      </button>
+                    ) : (
+                      <button onClick={() => openEditar(item)} className="rounded-xl border border-border p-2 text-muted transition hover:bg-bg hover:text-text" aria-label="Editar">
+                        {/* Reuse lucide already imported in Button system; keep lightweight */}
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="text-muted">
+                          <path
+                            d="M12 20h9"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                          <path
+                            d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      </button>
+                    )}
                     <button onClick={() => apagar(item.id)} className="rounded-xl border border-border p-2 text-danger transition hover:bg-danger/10" aria-label="Apagar">
                       <Trash2 size={16} />
                     </button>
@@ -1012,6 +1073,67 @@ CONTRATADA: ______________________`);
                 <div className="flex gap-2 pt-2">
                   <Button className="h-11 flex-1" onClick={salvar}>{editId ? "Salvar alteracoes" : "Criar item"}</Button>
                   <button onClick={() => setOpen(false)} className="h-11 rounded-2xl border border-border px-4 text-sm text-muted">Cancelar</button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {payOpen && (
+          <motion.div
+            className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 p-4 sm:items-center"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <motion.div
+              className="w-full max-w-lg rounded-3xl border border-white/70 bg-white p-5 shadow-soft"
+              initial={{ y: 24, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 24, opacity: 0 }}
+            >
+              <div className="mb-4 flex items-center justify-between">
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-muted">Contas a Receber</p>
+                  <h3 className="text-xl font-semibold text-text">Dar baixa no recebimento</h3>
+                </div>
+                <button onClick={() => setPayOpen(false)} className="rounded-xl border border-border p-2 text-muted hover:text-text" aria-label="Fechar">
+                  <X size={16} />
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted">Data de pagamento</p>
+                  <Input type="date" value={payDataPagamento} onChange={(e) => setPayDataPagamento(e.target.value)} />
+                  <p className="text-xs text-muted">Sugestao: hoje. Pode alterar se precisar.</p>
+                </div>
+
+                <div className="space-y-1">
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted">Conta bancaria (opcional)</p>
+                  <select
+                    value={payContaBancariaId}
+                    onChange={(e) => setPayContaBancariaId(e.target.value)}
+                    className="h-12 w-full rounded-2xl border border-border bg-white px-4 text-text outline-none"
+                  >
+                    <option value="">Nao informar</option>
+                    {contasBancariasApi.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.nome_conta} ({Number(c.saldo || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex gap-2 pt-2">
+                  <Button className="h-11 flex-1" onClick={confirmarPagamentoContaReceber}>
+                    Confirmar pagamento
+                  </Button>
+                  <button onClick={() => setPayOpen(false)} className="h-11 rounded-2xl border border-border px-4 text-sm text-muted">
+                    Cancelar
+                  </button>
                 </div>
               </div>
             </motion.div>
