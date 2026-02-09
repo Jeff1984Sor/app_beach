@@ -91,6 +91,7 @@ export default function AlunoFichaPage() {
   const [aulaSelecionadaId, setAulaSelecionadaId] = useState<number | null>(null);
   const [reagendarData, setReagendarData] = useState("");
   const [reagendarHora, setReagendarHora] = useState("");
+  const [reagendarProfessorId, setReagendarProfessorId] = useState("");
   const [aulasSelecionadas, setAulasSelecionadas] = useState<number[]>([]);
   const [aulasFiltroStatus, setAulasFiltroStatus] = useState<
     "todas_exceto_realizada" | "todas" | "agendada" | "realizada" | "falta" | "falta_aviso" | "cancelada"
@@ -355,6 +356,7 @@ export default function AlunoFichaPage() {
     const [dd, mm, yyyy] = String(aula.data || "").split("/");
     setReagendarData(dd && mm && yyyy ? `${yyyy}-${mm}-${dd}` : "");
     setReagendarHora(aula.hora || "");
+    setReagendarProfessorId(aula.professor_id ? String(aula.professor_id) : (professores?.[0]?.id ? String(professores[0].id) : ""));
     setOpenReagendar(true);
   }
 
@@ -363,7 +365,7 @@ export default function AlunoFichaPage() {
     const res = await fetch(`${API_URL}/alunos/${data.id}/aulas/${aulaSelecionadaId}/reagendar`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ data: reagendarData, hora: reagendarHora }),
+      body: JSON.stringify({ data: reagendarData, hora: reagendarHora, professor_id: reagendarProfessorId ? Number(reagendarProfessorId) : null }),
     });
     if (!res.ok) return;
     setOpenReagendar(false);
@@ -821,6 +823,11 @@ export default function AlunoFichaPage() {
 
       <Modal open={openReagendar} onClose={() => setOpenReagendar(false)} title="Reagendar aula">
         <div className="space-y-3">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted">Professor</p>
+          <select value={reagendarProfessorId} onChange={(e) => setReagendarProfessorId(e.target.value)} className="h-12 w-full rounded-2xl border border-border bg-white px-4 text-text outline-none">
+            <option value="">Selecione o professor</option>
+            {professores.map((p: any) => <option key={p.id} value={p.id}>{p.nome}</option>)}
+          </select>
           <Input type="date" value={reagendarData} onChange={(e) => setReagendarData(e.target.value)} />
           <select value={reagendarHora} onChange={(e) => setReagendarHora(e.target.value)} className="h-12 w-full rounded-2xl border border-border bg-white px-4 text-text outline-none">
             <option value="">Selecione o horario</option>

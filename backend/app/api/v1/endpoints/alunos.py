@@ -855,7 +855,15 @@ async def reagendar_aula(aluno_id: int, aula_id: int, payload: dict, db: AsyncSe
 
     duracao = int((aula.fim - aula.inicio).total_seconds() // 60) if aula.fim and aula.inicio else 60
     novo_fim = novo_inicio + timedelta(minutes=max(duracao, 30))
-    conflito = await slot_em_conflito(db, aula.professor_id, novo_inicio, novo_fim, ignore_aula_id=aula.id)
+    professor_id_payload = payload.get("professor_id")
+    professor_id_final = int(professor_id_payload) if professor_id_payload else (aula.professor_id or None)
+    if not professor_id_final:
+        raise HTTPException(status_code=400, detail="Selecione um professor")
+    prof_final = await db.scalar(select(Profissional).where(Profissional.id == int(professor_id_final)))
+    if not prof_final:
+        raise HTTPException(status_code=400, detail="Professor invalido")
+
+    conflito = await slot_em_conflito(db, prof_final.id, novo_inicio, novo_fim, ignore_aula_id=aula.id)
     if conflito:
         raise HTTPException(status_code=409, detail=conflito)
 
@@ -873,6 +881,7 @@ async def reagendar_aula(aluno_id: int, aula_id: int, payload: dict, db: AsyncSe
     aula.inicio = novo_inicio
     aula.fim = novo_fim
     aula.status = "agendada"
+    aula.professor_id = prof_final.id
     await db.commit()
     return {"ok": True}
 
