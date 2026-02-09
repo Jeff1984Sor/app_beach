@@ -3,7 +3,7 @@ import "./globals.css";
 import { Providers } from "./providers";
 
 export const metadata: Metadata = {
-  title: "Beach SaaS",
+  title: "Next Level Assessoria Esportiva",
   description: "Gestão premium para escola de Beach Tennis",
   manifest: "/manifest.json"
 };

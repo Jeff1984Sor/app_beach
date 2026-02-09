@@ -75,7 +75,7 @@ export default function LoginPage() {
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="relative w-full max-w-md space-y-6">
         <div className="space-y-3 text-center">
           <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-[28px] bg-gradient-to-br from-primary to-sky-400 text-4xl font-bold text-white shadow-soft">B</div>
-          <h1 className="text-3xl font-semibold tracking-tight">Beach Club SaaS</h1>
+          <h1 className="text-3xl font-semibold tracking-tight">Next Level Assessoria Esportiva</h1>
           <p className="text-sm text-muted">Acesso inteligente para sua escola</p>
         </div>
         <Card className="border border-border/70 p-6 backdrop-blur">

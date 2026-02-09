@@ -117,7 +117,7 @@ class MediaFile(Base, TimestampMixin):
 class EmpresaConfig(Base, TimestampMixin):
     __tablename__ = "empresa_configs"
     id: Mapped[int] = mapped_column(primary_key=True)
-    nome_fantasia: Mapped[str] = mapped_column(String(120), default="Beach Club")
+    nome_fantasia: Mapped[str] = mapped_column(String(120), default="Next Level Assessoria Esportiva")
     logo_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     cor_primaria: Mapped[str] = mapped_column(String(7), default="#0A84FF")
     whatsapp: Mapped[str | None] = mapped_column(String(20), nullable=True)

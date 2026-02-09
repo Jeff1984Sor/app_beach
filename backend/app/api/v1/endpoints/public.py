@@ -13,7 +13,7 @@ router = APIRouter(tags=["public"])
 async def branding(db: AsyncSession = Depends(get_db)):
     cfg = await db.scalar(select(EmpresaConfig).limit(1))
     if not cfg:
-        return {"nome_fantasia": "Beach Club", "logo_url": None, "cor_primaria": "#0A84FF"}
+        return {"nome_fantasia": "Next Level Assessoria Esportiva", "logo_url": None, "cor_primaria": "#0A84FF"}
     return {
         "nome_fantasia": cfg.nome_fantasia,
         "logo_url": cfg.logo_url,
