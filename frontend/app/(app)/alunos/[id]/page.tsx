@@ -92,6 +92,8 @@ export default function AlunoFichaPage() {
   const [reagendarData, setReagendarData] = useState("");
   const [reagendarHora, setReagendarHora] = useState("");
   const [reagendarProfessorId, setReagendarProfessorId] = useState("");
+  const [reagendarMsg, setReagendarMsg] = useState<string | null>(null);
+  const [reagendarLoading, setReagendarLoading] = useState(false);
   const [aulasSelecionadas, setAulasSelecionadas] = useState<number[]>([]);
   const [aulasFiltroStatus, setAulasFiltroStatus] = useState<
     "todas_exceto_realizada" | "todas" | "agendada" | "realizada" | "falta" | "falta_aviso" | "cancelada"
@@ -357,20 +359,29 @@ export default function AlunoFichaPage() {
     setReagendarData(dd && mm && yyyy ? `${yyyy}-${mm}-${dd}` : "");
     setReagendarHora(aula.hora || "");
     setReagendarProfessorId(aula.professor_id ? String(aula.professor_id) : (professores?.[0]?.id ? String(professores[0].id) : ""));
+    setReagendarMsg(null);
     setOpenReagendar(true);
   }
 
   async function salvarReagendamento() {
     if (!data || !aulaSelecionadaId) return;
+    setReagendarLoading(true);
+    setReagendarMsg(null);
     const res = await fetch(`${API_URL}/alunos/${data.id}/aulas/${aulaSelecionadaId}/reagendar`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ data: reagendarData, hora: reagendarHora, professor_id: reagendarProfessorId ? Number(reagendarProfessorId) : null }),
     });
-    if (!res.ok) return;
+    if (!res.ok) {
+      const erro = await res.json().catch(() => ({}));
+      setReagendarMsg(erro.detail || "Falha ao salvar reagendamento.");
+      setReagendarLoading(false);
+      return;
+    }
     setOpenReagendar(false);
     setAulaSelecionadaId(null);
     qc.invalidateQueries({ queryKey: ["aluno-ficha", params.id] });
+    setReagendarLoading(false);
   }
 
   async function deletarAula(aulaId: number) {
@@ -835,7 +846,10 @@ export default function AlunoFichaPage() {
               <option key={h} value={h}>{h}</option>
             ))}
           </select>
-          <Button className="w-full" onClick={salvarReagendamento}>Salvar reagendamento</Button>
+          {reagendarMsg && <p className="text-sm text-danger">{reagendarMsg}</p>}
+          <Button className="w-full" onClick={salvarReagendamento} disabled={reagendarLoading}>
+            {reagendarLoading ? "Salvando..." : "Salvar reagendamento"}
+          </Button>
         </div>
       </Modal>
 
