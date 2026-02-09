@@ -62,6 +62,22 @@ function daysInMonth(baseIso: string): number {
   return new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
 }
 
+function formatDateTimeBR(iso: string): { data: string; hora: string } {
+  if (!iso) return { data: "--", hora: "--" };
+  const dt = new Date(iso);
+  if (Number.isNaN(dt.getTime())) return { data: "--", hora: "--" };
+
+  // The backend stores timestamps in UTC. We render using a fixed Brazil timezone
+  // to avoid the "3h earlier" confusion when the server/browser is in another tz.
+  const fmtData = new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo" }).format(dt);
+  const fmtHora = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(dt);
+  return { data: fmtData, hora: fmtHora };
+}
+
 function statusMeta(statusRaw: string) {
   const s = String(statusRaw || "").toLowerCase();
   if (s === "realizada") return { label: "Realizada", tone: "success" as const, dot: "bg-success", icon: CheckCircle2 };
@@ -276,8 +292,7 @@ export default function AgendaPage() {
           <Card key={a.id} className="flex items-center justify-between gap-3 p-4">
             <div className="min-w-0">
               <p className="text-lg font-semibold text-primary">
-                {a.inicio ? new Date(a.inicio).toLocaleDateString("pt-BR") : "--"} -{" "}
-                {a.inicio ? new Date(a.inicio).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "--"}
+                {formatDateTimeBR(a.inicio).data} - {formatDateTimeBR(a.inicio).hora}
               </p>
               <p className="truncate font-medium">{a.professor_nome}</p>
               <p className="truncate text-sm text-muted">{a.unidade}</p>
