@@ -65,6 +65,18 @@ type MovimentacaoApi = {
   subcategoria?: string;
 };
 
+type ContaReceberApi = {
+  id: number;
+  aluno_id: number;
+  aluno_nome: string;
+  contrato_id?: number | null;
+  plano_nome?: string;
+  valor: number;
+  vencimento: string;
+  status: string;
+  data_pagamento?: string | null;
+};
+
 type UnidadeApi = {
   id: number;
   nome: string;
@@ -232,6 +244,15 @@ CONTRATADA: ______________________`);
     },
     enabled: entidade === "movimentacoes_financeiras",
   });
+  const { data: contasReceberApi = [] } = useQuery<ContaReceberApi[]>({
+    queryKey: ["contas-receber-config"],
+    queryFn: async () => {
+      const res = await fetch(`${API_URL}/contas-receber`, { cache: "no-store" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: entidade === "contas_receber",
+  });
   const { data: categoriasApi = [] } = useQuery<CategoriaApi[]>({
     queryKey: ["categorias-config"],
     queryFn: async () => {
@@ -300,10 +321,18 @@ CONTRATADA: ______________________`);
         status: p.status,
       }));
     }
+    if (entidade === "contas_receber") {
+      return contasReceberApi.map((c) => ({
+        id: c.id,
+        titulo: `${c.aluno_nome}${c.plano_nome ? ` • ${c.plano_nome}` : ""}`,
+        detalhe: `${Number(c.valor || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} • Venc: ${c.vencimento}${c.data_pagamento ? ` • Pago: ${c.data_pagamento}` : ""} • ${c.status}`,
+        status: String(c.status || "").toLowerCase() === "inativo" ? ("inativo" as const) : ("ativo" as const),
+      }));
+    }
 
     // Entidades sem backend ainda: sem dados falsos.
     return [];
-  }, [entidade, planosApi, contasBancariasApi, unidadesApi, movimentacoesApi, categoriasApi, subcategoriasApi]);
+  }, [entidade, planosApi, contasBancariasApi, unidadesApi, movimentacoesApi, categoriasApi, subcategoriasApi, contasReceberApi]);
   const categoriasAtivas = useMemo(
     () => categoriasApi.filter((x) => x.status === "ativo").map((x) => x.nome),
     [categoriasApi]
