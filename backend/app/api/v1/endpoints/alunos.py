@@ -776,6 +776,7 @@ async def disponibilidade_aula_avulsa(
     duracao_minutos: int = 60,
     db: AsyncSession = Depends(get_db),
 ):
+    await ensure_details_table(db)
     aluno = await db.get(Aluno, aluno_id)
     if not aluno:
         raise HTTPException(status_code=404, detail="Aluno nao encontrado")
