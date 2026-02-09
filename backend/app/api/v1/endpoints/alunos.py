@@ -705,7 +705,7 @@ async def criar_reservas_contrato(aluno_id: int, contrato_id: int, payload: dict
     if not prof:
         raise HTTPException(status_code=400, detail="Cadastre ao menos um profissional para reservar agenda")
 
-        inicio_periodo = contrato[1]
+    inicio_periodo = contrato[1]
     fim_periodo = contrato[2]
     valor = float(contrato[3] or 0)
     aulas_criadas = 0
