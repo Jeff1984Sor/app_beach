@@ -47,6 +47,12 @@ def parse_hora_min(hhmm: str) -> tuple[int, int]:
         raise HTTPException(status_code=400, detail="Hora invalida. Use HH:MM")
 
 
+def min_to_hhmm(total_min: int) -> str:
+    h = total_min // 60
+    m = total_min % 60
+    return f"{h:02d}:{m:02d}"
+
+
 @router.get("/professores")
 async def listar_professores(db: AsyncSession = Depends(get_db)):
     # Usuarios e Profissionais sao a mesma pessoa: garante que gestor/professor sempre tenham linha em profissionais
@@ -282,6 +288,10 @@ async def criar_bloqueio(payload: dict, db: AsyncSession = Depends(get_db)):
     if fim_min <= ini_min:
         raise HTTPException(status_code=400, detail="Hora fim deve ser maior que hora inicio")
 
+    # When user blocks multiple full hours (e.g. 10:00-13:00), store it as 1 record per hour.
+    # This makes availability checks and UI clearer (and matches expected behavior).
+    split_hourly = (m1 == 0) and (m2 == 0) and ((fim_min - ini_min) >= 120) and ((fim_min - ini_min) % 60 == 0)
+
     dias_validos = [dia_label_to_weekday(d) for d in dias_semana]
     dias_validos = [d for d in dias_validos if d is not None]
 
@@ -289,23 +299,45 @@ async def criar_bloqueio(payload: dict, db: AsyncSession = Depends(get_db)):
     cursor = data_inicio
     while cursor <= data_fim:
         if not dias_validos or cursor.weekday() in dias_validos:
-            await db.execute(
-                text(
-                    """
-                    INSERT INTO agenda_bloqueios (profissional_id, unidade_id, data, hora_inicio, hora_fim, motivo, status, created_at, updated_at)
-                    VALUES (:profissional_id, :unidade_id, :data, :hora_inicio, :hora_fim, :motivo, 'ativo', NOW(), NOW())
-                    """
-                ),
-                {
-                    "profissional_id": profissional_id,
-                    "unidade_id": unidade_id,
-                    "data": cursor,
-                    "hora_inicio": hora_inicio,
-                    "hora_fim": hora_fim,
-                    "motivo": motivo,
-                },
-            )
-            total += 1
+            if split_hourly:
+                t = ini_min
+                while t < fim_min:
+                    await db.execute(
+                        text(
+                            """
+                            INSERT INTO agenda_bloqueios (profissional_id, unidade_id, data, hora_inicio, hora_fim, motivo, status, created_at, updated_at)
+                            VALUES (:profissional_id, :unidade_id, :data, :hora_inicio, :hora_fim, :motivo, 'ativo', NOW(), NOW())
+                            """
+                        ),
+                        {
+                            "profissional_id": profissional_id,
+                            "unidade_id": unidade_id,
+                            "data": cursor,
+                            "hora_inicio": min_to_hhmm(t),
+                            "hora_fim": min_to_hhmm(t + 60),
+                            "motivo": motivo,
+                        },
+                    )
+                    total += 1
+                    t += 60
+            else:
+                await db.execute(
+                    text(
+                        """
+                        INSERT INTO agenda_bloqueios (profissional_id, unidade_id, data, hora_inicio, hora_fim, motivo, status, created_at, updated_at)
+                        VALUES (:profissional_id, :unidade_id, :data, :hora_inicio, :hora_fim, :motivo, 'ativo', NOW(), NOW())
+                        """
+                    ),
+                    {
+                        "profissional_id": profissional_id,
+                        "unidade_id": unidade_id,
+                        "data": cursor,
+                        "hora_inicio": hora_inicio,
+                        "hora_fim": hora_fim,
+                        "motivo": motivo,
+                    },
+                )
+                total += 1
         cursor += timedelta(days=1)
 
     await db.commit()
