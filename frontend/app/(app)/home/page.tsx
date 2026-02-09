@@ -8,6 +8,24 @@ import { Section } from "@/components/ui/section";
 import { useAuthStore } from "@/store/auth";
 
 type Kpi = { label: string; value: string };
+type AgendaAula = {
+  id: number;
+  inicio: string;
+  status: string;
+  professor_nome: string;
+  aluno_id?: number;
+  unidade?: string;
+  data_br?: string;
+  hora_br?: string;
+};
+type ContaReceber = {
+  id: number;
+  aluno_nome: string;
+  plano_nome: string;
+  valor: number;
+  vencimento: string;
+  status: string;
+};
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
 
@@ -18,6 +36,10 @@ function iconFor(label: string) {
   if (s.includes("receb")) return TrendingUp;
   if (s.includes("receita") || s.includes("receber")) return CreditCard;
   return ArrowRight;
+}
+
+function todayIso() {
+  return new Date().toISOString().slice(0, 10);
 }
 
 export default function HomePage() {
@@ -38,7 +60,32 @@ export default function HomePage() {
     enabled: !!token,
   });
 
+  const { data: agendaHoje, isLoading: agendaLoading } = useQuery<{ aulas: AgendaAula[] }>({
+    queryKey: ["home-agenda-hoje"],
+    queryFn: async () => {
+      const d = todayIso();
+      const qs = new URLSearchParams({ data_inicio: d, data_fim: d, _ts: String(Date.now()) });
+      const res = await fetch(`${API_URL}/agenda/periodo?${qs.toString()}`, { cache: "no-store" });
+      if (!res.ok) return { aulas: [] };
+      const body = await res.json();
+      return { aulas: (body.aulas || []) as AgendaAula[] };
+    },
+    enabled: !!token && role === "gestor",
+  });
+
+  const { data: pendencias, isLoading: pendLoading } = useQuery<ContaReceber[]>({
+    queryKey: ["home-contas-receber-aberto"],
+    queryFn: async () => {
+      const res = await fetch(`${API_URL}/contas-receber?status=aberto`, { cache: "no-store" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!token && role === "gestor",
+  });
+
   const kpis = data?.kpis || [];
+  const aulasHoje = (agendaHoje?.aulas || []).slice(0, 6);
+  const contasAbertas = (pendencias || []).slice(0, 6);
 
   return (
     <main className="space-y-5">
@@ -75,14 +122,86 @@ export default function HomePage() {
         </div>
       </Section>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <Link href="/alunos/novo" className="inline-flex h-11 items-center rounded-2xl bg-primary px-5 text-sm font-semibold text-white shadow-soft">
-          + Aluno
-        </Link>
-        <Link href="/financeiro" className="inline-flex h-11 items-center rounded-2xl border border-border bg-white px-5 text-sm font-semibold text-text">
-          Ver Financeiro <ArrowRight className="ml-2" size={16} />
-        </Link>
-      </div>
+      {role === "gestor" && (
+        <div className="grid gap-3 lg:grid-cols-12">
+          <Card className="lg:col-span-7">
+            <div className="flex items-center justify-between p-4">
+              <div>
+                <p className="text-xs uppercase tracking-wide text-muted">Hoje</p>
+                <p className="text-lg font-semibold text-text">Agenda</p>
+              </div>
+              <Link href="/agenda" className="text-sm font-semibold text-primary">
+                Ver agenda <ArrowRight className="ml-1 inline" size={16} />
+              </Link>
+            </div>
+            <div className="space-y-2 px-4 pb-4">
+              {agendaLoading && <div className="h-24 animate-pulse rounded-2xl bg-bg" />}
+              {!agendaLoading && aulasHoje.length === 0 && (
+                <div className="rounded-2xl bg-bg p-4 text-sm text-muted">Sem aulas para hoje.</div>
+              )}
+              {!agendaLoading &&
+                aulasHoje.map((a) => (
+                  <div key={a.id} className="flex items-center justify-between rounded-2xl border border-border bg-white p-4">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-text">{a.data_br || todayIso()} • {a.hora_br || "--:--"}</p>
+                      <p className="truncate text-sm text-muted">{a.professor_nome} {a.unidade ? `• ${a.unidade}` : ""}</p>
+                    </div>
+                    <span className="rounded-full bg-primary/10 px-3 py-1 text-xs text-primary">{a.status || "agendada"}</span>
+                  </div>
+                ))}
+            </div>
+          </Card>
+
+          <Card className="lg:col-span-5">
+            <div className="flex items-center justify-between p-4">
+              <div>
+                <p className="text-xs uppercase tracking-wide text-muted">Pendencias</p>
+                <p className="text-lg font-semibold text-text">Contas a Receber</p>
+              </div>
+              <Link href="/financeiro" className="text-sm font-semibold text-primary">
+                Ver financeiro <ArrowRight className="ml-1 inline" size={16} />
+              </Link>
+            </div>
+            <div className="space-y-2 px-4 pb-4">
+              {pendLoading && <div className="h-24 animate-pulse rounded-2xl bg-bg" />}
+              {!pendLoading && contasAbertas.length === 0 && (
+                <div className="rounded-2xl bg-bg p-4 text-sm text-muted">Nenhuma conta em aberto.</div>
+              )}
+              {!pendLoading &&
+                contasAbertas.map((c) => (
+                  <div key={c.id} className="rounded-2xl border border-border bg-white p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate font-semibold text-text">{c.aluno_nome}</p>
+                        <p className="truncate text-sm text-muted">{c.plano_nome || "Sem plano"} • Venc: {c.vencimento}</p>
+                      </div>
+                      <p className="shrink-0 font-semibold text-text">
+                        {Number(c.valor || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+
+              <div className="flex flex-wrap items-center gap-2 pt-2">
+                <Link href="/alunos/novo" className="inline-flex h-11 items-center rounded-2xl bg-primary px-5 text-sm font-semibold text-white shadow-soft">
+                  + Aluno
+                </Link>
+                <Link href="/configuracoes?entidade=planos" className="inline-flex h-11 items-center rounded-2xl border border-border bg-white px-5 text-sm font-semibold text-text">
+                  + Plano
+                </Link>
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {role !== "gestor" && (
+        <div className="flex flex-wrap items-center gap-2">
+          <Link href="/alunos" className="inline-flex h-11 items-center rounded-2xl bg-primary px-5 text-sm font-semibold text-white shadow-soft">
+            Ver alunos
+          </Link>
+        </div>
+      )}
     </main>
   );
 }
