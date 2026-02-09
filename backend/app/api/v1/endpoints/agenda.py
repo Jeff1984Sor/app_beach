@@ -47,10 +47,27 @@ def parse_hora_min(hhmm: str) -> tuple[int, int]:
 
 @router.get("/professores")
 async def listar_professores(db: AsyncSession = Depends(get_db)):
+    # Usuarios e Profissionais sao a mesma pessoa: garante que gestor/professor sempre tenham linha em profissionais
+    # para poderem ser selecionados em contratos/aulas.
+    await db.execute(
+        text(
+            """
+            INSERT INTO profissionais (usuario_id, valor_hora, created_at, updated_at)
+            SELECT u.id, 0, NOW(), NOW()
+            FROM usuarios u
+            WHERE u.ativo = TRUE
+              AND u.role IN ('gestor', 'professor')
+              AND NOT EXISTS (SELECT 1 FROM profissionais p WHERE p.usuario_id = u.id)
+            """
+        )
+    )
+    await db.commit()
     rows = (
         await db.execute(
             select(Profissional.id, Profissional.usuario_id, Usuario.nome)
             .join(Usuario, Usuario.id == Profissional.usuario_id)
+            .where(Usuario.ativo == True)
+            .where(Usuario.role.in_(["gestor", "professor"]))
             .order_by(Usuario.nome.asc())
         )
     ).all()
