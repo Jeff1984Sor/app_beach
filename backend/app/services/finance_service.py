@@ -11,18 +11,47 @@ async def gerar_comissao(db: AsyncSession):
     inicio_mes_anterior = fim_mes_anterior.replace(day=1)
 
     aulas = await db.execute(
-        select(Aula.professor_id, func.sum(Aula.valor)).where(
+        select(Aula.professor_id, func.sum(Aula.valor), func.count(Aula.id)).where(
             Aula.inicio >= inicio_mes_anterior,
             Aula.inicio <= fim_mes_anterior,
             Aula.status == "realizada",
         ).group_by(Aula.professor_id)
     )
-    regras = {r.profissional_id: float(r.percentual) for r in (await db.execute(select(RegraComissao))).scalars()}
+    regras = {
+        r.profissional_id: {
+            "tipo": (getattr(r, "tipo", "percentual") or "percentual"),
+            "percentual": float(getattr(r, "percentual", 0) or 0),
+            "valor_por_aula": float(getattr(r, "valor_por_aula", 0) or 0),
+        }
+        for r in (await db.execute(select(RegraComissao))).scalars().all()
+    }
     resultado = []
-    for prof_id, total in aulas.all():
-        perc = regras.get(prof_id, 0)
-        valor = float(total or 0) * (perc / 100)
-        resultado.append({"profissional_id": prof_id, "percentual": perc, "valor": round(valor, 2)})
+    for prof_id, total, qtd in aulas.all():
+        regra = regras.get(prof_id) or {"tipo": "percentual", "percentual": 0, "valor_por_aula": 0}
+        tipo = (regra.get("tipo") or "percentual").lower()
+        if tipo == "valor_aula":
+            valor = float(qtd or 0) * float(regra.get("valor_por_aula") or 0)
+            resultado.append(
+                {
+                    "profissional_id": prof_id,
+                    "tipo": "valor_aula",
+                    "qtd_aulas": int(qtd or 0),
+                    "valor_por_aula": float(regra.get("valor_por_aula") or 0),
+                    "valor": round(valor, 2),
+                }
+            )
+        else:
+            perc = float(regra.get("percentual") or 0)
+            valor = float(total or 0) * (perc / 100)
+            resultado.append(
+                {
+                    "profissional_id": prof_id,
+                    "tipo": "percentual",
+                    "percentual": perc,
+                    "base": float(total or 0),
+                    "valor": round(valor, 2),
+                }
+            )
     return resultado
 
 
@@ -30,7 +59,8 @@ async def dre(db: AsyncSession):
     receita = float((await db.scalar(select(func.sum(ContaReceber.valor)).where(ContaReceber.status == "pago"))) or 0)
     despesas = float((await db.scalar(select(func.sum(ContaPagar.valor)))) or 0)
     custo_aulas = float((await db.scalar(select(func.sum(Aula.valor)).where(Aula.status == "realizada"))) or 0)
-    comissao = round(custo_aulas * 0.1, 2)
+    # Comissao real: contas a pagar categorizadas como "Comissao"
+    comissao = float((await db.scalar(select(func.sum(ContaPagar.valor)).where(ContaPagar.categoria == "Comissao"))) or 0)
     resultado = receita - despesas - comissao
     total_aulas = int((await db.scalar(select(func.count(Aula.id)).where(Aula.status == "realizada"))) or 0)
     custo_por_aula = round((custo_aulas / total_aulas), 2) if total_aulas else 0

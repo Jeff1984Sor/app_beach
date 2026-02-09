@@ -84,6 +84,8 @@ class ContaPagar(Base, TimestampMixin):
     subcategoria: Mapped[str | None] = mapped_column(String(120), nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="aberto")
     data_pagamento: Mapped[date | None] = mapped_column(Date, nullable=True)
+    profissional_id: Mapped[int | None] = mapped_column(ForeignKey("profissionais.id"), nullable=True)
+    referencia_mes: Mapped[str | None] = mapped_column(String(7), nullable=True)  # YYYY-MM
 
 
 class MovimentoBancario(Base, TimestampMixin):
@@ -99,7 +101,9 @@ class RegraComissao(Base, TimestampMixin):
     __tablename__ = "regras_comissao"
     id: Mapped[int] = mapped_column(primary_key=True)
     profissional_id: Mapped[int] = mapped_column(ForeignKey("profissionais.id"))
+    tipo: Mapped[str] = mapped_column(String(20), default="percentual")  # percentual | valor_aula
     percentual: Mapped[float] = mapped_column(Numeric(5, 2), default=0)
+    valor_por_aula: Mapped[float] = mapped_column(Numeric(10, 2), default=0)
 
 
 class MediaFile(Base, TimestampMixin):

@@ -112,6 +112,15 @@ type SubcategoriaApi = {
   status: "ativo" | "inativo";
 };
 
+type RegraComissaoApi = {
+  id: number;
+  profissional_id: number;
+  professor_nome: string;
+  tipo: "percentual" | "valor_aula";
+  percentual: number;
+  valor_por_aula: number;
+};
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
 
 const LABELS: Record<Entidade, string> = {
@@ -178,6 +187,10 @@ export default function ConfiguracoesPage() {
   const [contaPagarSubcategoria, setContaPagarSubcategoria] = useState("");
   const [contaPagarRecorrencia, setContaPagarRecorrencia] = useState(false);
   const [contaPagarQtdRecorrencias, setContaPagarQtdRecorrencias] = useState("1");
+  const [regraProfessorId, setRegraProfessorId] = useState("");
+  const [regraTipo, setRegraTipo] = useState<"percentual" | "valor_aula">("percentual");
+  const [regraPercentual, setRegraPercentual] = useState("");
+  const [regraValorAula, setRegraValorAula] = useState("");
   const [contratoTexto, setContratoTexto] = useState(`CONTRATO DE PRESTACAO DE SERVICOS - BEACH TENNIS
 
 CONTRATANTE:
@@ -296,6 +309,24 @@ CONTRATADA: ______________________`);
     },
     enabled: entidade === "subcategoria" || entidade === "plano",
   });
+  const { data: regrasComissaoApi = [] } = useQuery<RegraComissaoApi[]>({
+    queryKey: ["regras-comissao-config"],
+    queryFn: async () => {
+      const res = await fetch(`${API_URL}/regras-comissao`, { cache: "no-store" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: entidade === "regras_comissao",
+  });
+  const { data: professoresApi = [] } = useQuery<any[]>({
+    queryKey: ["agenda-professores-config"],
+    queryFn: async () => {
+      const res = await fetch(`${API_URL}/agenda/professores`, { cache: "no-store" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: entidade === "regras_comissao",
+  });
 
   const items = useMemo(() => {
     if (entidade === "unidades") {
@@ -362,10 +393,21 @@ CONTRATADA: ______________________`);
         status: String(c.status || "").toLowerCase() === "inativo" ? ("inativo" as const) : ("ativo" as const),
       }));
     }
+    if (entidade === "regras_comissao") {
+      return regrasComissaoApi.map((r) => ({
+        id: r.id,
+        titulo: r.professor_nome,
+        detalhe:
+          r.tipo === "valor_aula"
+            ? `${Number(r.valor_por_aula || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} por aula`
+            : `${Number(r.percentual || 0).toFixed(2)}% sobre aulas realizadas`,
+        status: "ativo" as const,
+      }));
+    }
 
     // Entidades sem backend ainda: sem dados falsos.
     return [];
-  }, [entidade, planosApi, contasBancariasApi, unidadesApi, movimentacoesApi, categoriasApi, subcategoriasApi, contasReceberApi, contasPagarApi]);
+  }, [entidade, planosApi, contasBancariasApi, unidadesApi, movimentacoesApi, categoriasApi, subcategoriasApi, contasReceberApi, contasPagarApi, regrasComissaoApi]);
   const categoriasAtivas = useMemo(
     () => categoriasApi.filter((x) => x.status === "ativo").map((x) => x.nome),
     [categoriasApi]
@@ -412,6 +454,10 @@ CONTRATADA: ______________________`);
     setContaPagarSubcategoria("");
     setContaPagarRecorrencia(false);
     setContaPagarQtdRecorrencias("1");
+    setRegraProfessorId(professoresApi?.[0]?.id ? String(professoresApi[0].id) : "");
+    setRegraTipo("percentual");
+    setRegraPercentual("");
+    setRegraValorAula("");
     if (entidade === "modelo_contrato") {
       setContratoTexto(contratoTexto);
     }
@@ -468,6 +514,15 @@ CONTRATADA: ______________________`);
         setContaPagarSubcategoria(conta.subcategoria || "");
         setContaPagarRecorrencia(false);
         setContaPagarQtdRecorrencias("1");
+      }
+    }
+    if (entidade === "regras_comissao") {
+      const regra = regrasComissaoApi.find((r) => r.id === item.id);
+      if (regra) {
+        setRegraProfessorId(String(regra.profissional_id));
+        setRegraTipo(regra.tipo);
+        setRegraPercentual(String(regra.percentual || ""));
+        setRegraValorAula(String(regra.valor_por_aula || ""));
       }
     }
     if (entidade === "modelo_contrato") {
@@ -570,6 +625,22 @@ CONTRATADA: ______________________`);
       }
       return;
     }
+    if (entidade === "regras_comissao") {
+      const payload: any = {
+        profissional_id: Number(regraProfessorId),
+        tipo: regraTipo,
+        percentual: regraTipo === "percentual" ? Number(String(regraPercentual || "0").replace(",", ".")) : 0,
+        valor_por_aula: regraTipo === "valor_aula" ? Number(String(regraValorAula || "0").replace(",", ".")) : 0,
+      };
+      const url = editId ? `${API_URL}/regras-comissao/${editId}` : `${API_URL}/regras-comissao`;
+      const method = editId ? "PUT" : "POST";
+      const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      if (res.ok) {
+        qc.invalidateQueries({ queryKey: ["regras-comissao-config"] });
+        setOpen(false);
+      }
+      return;
+    }
     // Entidades sem backend ainda: nao criar dados falsos na UI.
     setOpen(false);
   }
@@ -614,6 +685,11 @@ CONTRATADA: ______________________`);
       if (res.ok) qc.invalidateQueries({ queryKey: ["contas-pagar-config"] });
       return;
     }
+    if (entidade === "regras_comissao") {
+      const res = await fetch(`${API_URL}/regras-comissao/${id}`, { method: "DELETE" });
+      if (res.ok) qc.invalidateQueries({ queryKey: ["regras-comissao-config"] });
+      return;
+    }
     if (entidade === "movimentacoes_financeiras") return;
     return;
   }
@@ -628,6 +704,29 @@ CONTRATADA: ______________________`);
           </div>
         )}
         <div className="flex justify-end">
+          {entidade === "regras_comissao" && (
+            <div className="mr-auto flex flex-wrap gap-2">
+              <button
+                onClick={async () => {
+                  const res = await fetch(`${API_URL}/comissoes/gerar-contas-pagar`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({}),
+                  });
+                  if (res.ok) {
+                    qc.invalidateQueries({ queryKey: ["contas-pagar-config"] });
+                    window.alert("Contas a pagar de comissao geradas (mes anterior).");
+                  } else {
+                    const err = await res.json().catch(() => ({}));
+                    window.alert(err.detail || "Falha ao gerar comissao.");
+                  }
+                }}
+                className="inline-flex h-10 items-center gap-2 rounded-xl border border-border bg-white px-4 text-sm font-semibold text-text shadow-soft hover:bg-bg"
+              >
+                Gerar comissao do mes
+              </button>
+            </div>
+          )}
           <button onClick={openNovo} className="inline-flex h-10 items-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-white shadow-soft">
             <Plus size={16} /> Novo
           </button>
@@ -868,6 +967,42 @@ CONTRATADA: ______________________`);
                         </div>
                       )}
                     </div>
+                  </>
+                ) : entidade === "regras_comissao" ? (
+                  <>
+                    <div className="space-y-1">
+                      <p className="text-xs font-medium uppercase tracking-wide text-muted">Professor</p>
+                      <select value={regraProfessorId} onChange={(e) => setRegraProfessorId(e.target.value)} className="h-12 w-full rounded-2xl border border-border bg-white px-4 text-text outline-none">
+                        <option value="">Selecione</option>
+                        {professoresApi.map((p: any) => (
+                          <option key={p.id} value={p.id}>
+                            {p.nome}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-xs font-medium uppercase tracking-wide text-muted">Tipo</p>
+                      <select value={regraTipo} onChange={(e) => setRegraTipo(e.target.value as any)} className="h-12 w-full rounded-2xl border border-border bg-white px-4 text-text outline-none">
+                        <option value="percentual">Percentual</option>
+                        <option value="valor_aula">Valor por aula</option>
+                      </select>
+                    </div>
+                    {regraTipo === "percentual" ? (
+                      <div className="space-y-1">
+                        <p className="text-xs font-medium uppercase tracking-wide text-muted">Percentual (%)</p>
+                        <Input value={regraPercentual} onChange={(e) => setRegraPercentual(e.target.value)} placeholder="Ex: 10" />
+                        <div className="text-xs text-muted">Calcula em cima do total de aulas realizadas no mes anterior.</div>
+                      </div>
+                    ) : (
+                      <div className="space-y-1">
+                        <p className="text-xs font-medium uppercase tracking-wide text-muted">Valor por aula</p>
+                        <Input value={regraValorAula} onChange={(e) => setRegraValorAula(e.target.value)} placeholder="Ex: 20,00" />
+                        <div className="text-xs text-muted">
+                          {Number(String(regraValorAula || "0").replace(",", ".") || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} por aula realizada.
+                        </div>
+                      </div>
+                    )}
                   </>
                 ) : (
                   <div className="space-y-1">

@@ -40,6 +40,18 @@ async def ensure_contas_pagar_columns(db: AsyncSession):
               ) THEN
                 ALTER TABLE contas_pagar ADD COLUMN data_pagamento DATE;
               END IF;
+              IF NOT EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'contas_pagar' AND column_name = 'profissional_id'
+              ) THEN
+                ALTER TABLE contas_pagar ADD COLUMN profissional_id INTEGER;
+              END IF;
+              IF NOT EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'contas_pagar' AND column_name = 'referencia_mes'
+              ) THEN
+                ALTER TABLE contas_pagar ADD COLUMN referencia_mes VARCHAR(7);
+              END IF;
             END $$;
             """
         )
@@ -174,4 +186,3 @@ async def deletar_conta_pagar(conta_id: int, db: AsyncSession = Depends(get_db))
     await db.delete(row)
     await db.commit()
     return {"ok": True}
-
