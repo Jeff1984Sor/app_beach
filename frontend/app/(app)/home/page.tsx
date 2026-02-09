@@ -137,7 +137,9 @@ export default function HomePage() {
   }
 
   const kpis = data?.kpis || [];
-  const aulasHoje = (agendaHoje?.aulas || []).slice(0, 6);
+  const aulasHoje = (agendaHoje?.aulas || [])
+    .filter((a) => String(a.status || "").toLowerCase() === "realizada")
+    .slice(0, 6);
   const contasAbertas = (pendencias || []).slice(0, 6);
 
   return (
