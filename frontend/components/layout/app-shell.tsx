@@ -27,7 +27,6 @@ const tabelas = [
   { nome: "Subcategoria", href: "/configuracoes?entidade=subcategoria" },
   { nome: "Modelo de Contrato", href: "/configuracoes?entidade=modelo_contrato" },
   { nome: "Media Files", href: "/configuracoes?entidade=media_files" },
-  { nome: "Empresa Config", href: "/configuracoes?entidade=empresa_config" },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
