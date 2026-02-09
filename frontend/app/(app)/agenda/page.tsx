@@ -243,7 +243,7 @@ export default function AgendaPage() {
             </button>
           </div>
 
-          <div className="lg:col-span-4">
+          <div className="lg:col-span-3">
             <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-3.5 h-5 w-5 text-muted" />
               <Input className="h-12 pl-11" placeholder="Buscar por professor ou unidade" value={busca} onChange={(e) => setBusca(e.target.value)} />
@@ -265,9 +265,9 @@ export default function AgendaPage() {
             ))}
           </select>
 
-          <div className="lg:col-span-1">
-            <Button className="h-12 w-full px-3" onClick={() => setOpenBloqueio(true)}>
-              <Lock size={14} className="mr-2" /> Bloquear
+          <div className="lg:col-span-2">
+            <Button className="h-12 w-full min-w-[120px] justify-center gap-2 px-4 whitespace-nowrap" onClick={() => setOpenBloqueio(true)}>
+              <Lock size={16} /> Bloquear
             </Button>
           </div>
         </div>
