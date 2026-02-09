@@ -367,21 +367,29 @@ export default function AlunoFichaPage() {
     if (!data || !aulaSelecionadaId) return;
     setReagendarLoading(true);
     setReagendarMsg(null);
-    const res = await fetch(`${API_URL}/alunos/${data.id}/aulas/${aulaSelecionadaId}/reagendar`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ data: reagendarData, hora: reagendarHora, professor_id: reagendarProfessorId ? Number(reagendarProfessorId) : null }),
-    });
-    if (!res.ok) {
-      const erro = await res.json().catch(() => ({}));
-      setReagendarMsg(erro.detail || "Falha ao salvar reagendamento.");
+    const ctrl = new AbortController();
+    const to = window.setTimeout(() => ctrl.abort(), 15000);
+    try {
+      const res = await fetch(`${API_URL}/alunos/${data.id}/aulas/${aulaSelecionadaId}/reagendar`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ data: reagendarData, hora: reagendarHora, professor_id: reagendarProfessorId ? Number(reagendarProfessorId) : null }),
+        signal: ctrl.signal,
+      });
+      if (!res.ok) {
+        const erro = await res.json().catch(() => ({}));
+        setReagendarMsg(erro.detail || "Falha ao salvar reagendamento.");
+        return;
+      }
+      setOpenReagendar(false);
+      setAulaSelecionadaId(null);
+      qc.invalidateQueries({ queryKey: ["aluno-ficha", params.id] });
+    } catch (e: any) {
+      setReagendarMsg(e?.name === "AbortError" ? "Tempo esgotado ao salvar. Tente novamente." : "Falha de rede ao salvar. Tente novamente.");
+    } finally {
+      window.clearTimeout(to);
       setReagendarLoading(false);
-      return;
     }
-    setOpenReagendar(false);
-    setAulaSelecionadaId(null);
-    qc.invalidateQueries({ queryKey: ["aluno-ficha", params.id] });
-    setReagendarLoading(false);
   }
 
   async function deletarAula(aulaId: number) {
