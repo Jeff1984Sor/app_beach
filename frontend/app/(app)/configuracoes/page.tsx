@@ -77,6 +77,19 @@ type ContaReceberApi = {
   data_pagamento?: string | null;
 };
 
+type ContaPagarApi = {
+  id: number;
+  descricao: string;
+  valor: number;
+  vencimento: string | null;
+  vencimento_br: string;
+  categoria?: string | null;
+  subcategoria?: string | null;
+  status: string;
+  data_pagamento?: string | null;
+  data_pagamento_br?: string | null;
+};
+
 type UnidadeApi = {
   id: number;
   nome: string;
@@ -162,6 +175,12 @@ export default function ConfiguracoesPage() {
   const [unidadeEndereco, setUnidadeEndereco] = useState("");
   const [categoriaTipo, setCategoriaTipo] = useState<"Receita" | "Despesa">("Receita");
   const [subcategoriaCategoria, setSubcategoriaCategoria] = useState("");
+  const [contaPagarValor, setContaPagarValor] = useState("");
+  const [contaPagarVencimento, setContaPagarVencimento] = useState(new Date().toISOString().slice(0, 10));
+  const [contaPagarCategoria, setContaPagarCategoria] = useState("");
+  const [contaPagarSubcategoria, setContaPagarSubcategoria] = useState("");
+  const [contaPagarRecorrencia, setContaPagarRecorrencia] = useState(false);
+  const [contaPagarQtdRecorrencias, setContaPagarQtdRecorrencias] = useState("1");
   const [contratoTexto, setContratoTexto] = useState(`CONTRATO DE PRESTACAO DE SERVICOS - BEACH TENNIS
 
 CONTRATANTE:
@@ -253,6 +272,15 @@ CONTRATADA: ______________________`);
     },
     enabled: entidade === "contas_receber",
   });
+  const { data: contasPagarApi = [] } = useQuery<ContaPagarApi[]>({
+    queryKey: ["contas-pagar-config"],
+    queryFn: async () => {
+      const res = await fetch(`${API_URL}/contas-pagar`, { cache: "no-store" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: entidade === "contas_pagar",
+  });
   const { data: categoriasApi = [] } = useQuery<CategoriaApi[]>({
     queryKey: ["categorias-config"],
     queryFn: async () => {
@@ -329,17 +357,33 @@ CONTRATADA: ______________________`);
         status: String(c.status || "").toLowerCase() === "inativo" ? ("inativo" as const) : ("ativo" as const),
       }));
     }
+    if (entidade === "contas_pagar") {
+      return contasPagarApi.map((c) => ({
+        id: c.id,
+        titulo: c.descricao,
+        detalhe: `${Number(c.valor || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} • Venc: ${c.vencimento_br} • ${c.categoria || "Sem categoria"} / ${c.subcategoria || "Sem subcategoria"}`,
+        status: String(c.status || "").toLowerCase() === "inativo" ? ("inativo" as const) : ("ativo" as const),
+      }));
+    }
 
     // Entidades sem backend ainda: sem dados falsos.
     return [];
-  }, [entidade, planosApi, contasBancariasApi, unidadesApi, movimentacoesApi, categoriasApi, subcategoriasApi, contasReceberApi]);
+  }, [entidade, planosApi, contasBancariasApi, unidadesApi, movimentacoesApi, categoriasApi, subcategoriasApi, contasReceberApi, contasPagarApi]);
   const categoriasAtivas = useMemo(
     () => categoriasApi.filter((x) => x.status === "ativo").map((x) => x.nome),
+    [categoriasApi]
+  );
+  const categoriasDespesaAtivas = useMemo(
+    () => categoriasApi.filter((x) => x.status === "ativo" && x.tipo === "Despesa").map((x) => x.nome),
     [categoriasApi]
   );
   const subcategoriasFiltradasPlano = useMemo(
     () => subcategoriasApi.filter((s) => !planoCategoria || s.categoria_nome === planoCategoria),
     [subcategoriasApi, planoCategoria]
+  );
+  const subcategoriasFiltradasContaPagar = useMemo(
+    () => subcategoriasApi.filter((s) => !contaPagarCategoria || s.categoria_nome === contaPagarCategoria),
+    [subcategoriasApi, contaPagarCategoria]
   );
   const title = LABELS[entidade] || "Configuracoes";
 
@@ -365,6 +409,12 @@ CONTRATADA: ______________________`);
     setUnidadeEndereco("");
     setCategoriaTipo("Receita");
     setSubcategoriaCategoria(categoriasAtivas[0] || "");
+    setContaPagarValor("");
+    setContaPagarVencimento(new Date().toISOString().slice(0, 10));
+    setContaPagarCategoria(categoriasDespesaAtivas[0] || "");
+    setContaPagarSubcategoria("");
+    setContaPagarRecorrencia(false);
+    setContaPagarQtdRecorrencias("1");
     if (entidade === "modelo_contrato") {
       setContratoTexto(contratoTexto);
     }
@@ -410,6 +460,18 @@ CONTRATADA: ______________________`);
     if (entidade === "subcategoria") {
       const sub = subcategoriasApi.find((s) => s.id === item.id);
       setSubcategoriaCategoria(sub?.categoria_nome || "");
+    }
+    if (entidade === "contas_pagar") {
+      const conta = contasPagarApi.find((c) => c.id === item.id);
+      if (conta) {
+        setTitulo(conta.descricao || "");
+        setContaPagarValor(String(conta.valor || 0));
+        setContaPagarVencimento(conta.vencimento || new Date().toISOString().slice(0, 10));
+        setContaPagarCategoria(conta.categoria || "");
+        setContaPagarSubcategoria(conta.subcategoria || "");
+        setContaPagarRecorrencia(false);
+        setContaPagarQtdRecorrencias("1");
+      }
     }
     if (entidade === "modelo_contrato") {
       setContratoTexto(item.detalhe);
@@ -492,6 +554,25 @@ CONTRATADA: ______________________`);
       }
       return;
     }
+    if (entidade === "contas_pagar") {
+      const payload = {
+        descricao: titulo,
+        valor: Number(String(contaPagarValor || "0").replace(",", ".")),
+        vencimento: contaPagarVencimento,
+        categoria: contaPagarCategoria || null,
+        subcategoria: contaPagarSubcategoria || null,
+        recorrencia: contaPagarRecorrencia ? "mensal" : null,
+        quantidade_recorrencias: contaPagarRecorrencia ? Number(contaPagarQtdRecorrencias || 1) : 1,
+      };
+      const url = editId ? `${API_URL}/contas-pagar/${editId}` : `${API_URL}/contas-pagar`;
+      const method = editId ? "PUT" : "POST";
+      const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      if (res.ok) {
+        qc.invalidateQueries({ queryKey: ["contas-pagar-config"] });
+        setOpen(false);
+      }
+      return;
+    }
     // Entidades sem backend ainda: nao criar dados falsos na UI.
     setOpen(false);
   }
@@ -529,6 +610,11 @@ CONTRATADA: ______________________`);
     if (entidade === "subcategoria") {
       const res = await fetch(`${API_URL}/subcategorias/${id}`, { method: "DELETE" });
       if (res.ok) qc.invalidateQueries({ queryKey: ["subcategorias-config"] });
+      return;
+    }
+    if (entidade === "contas_pagar") {
+      const res = await fetch(`${API_URL}/contas-pagar/${id}`, { method: "DELETE" });
+      if (res.ok) qc.invalidateQueries({ queryKey: ["contas-pagar-config"] });
       return;
     }
     if (entidade === "movimentacoes_financeiras") return;
@@ -720,6 +806,70 @@ CONTRATADA: ______________________`);
                     </div>
                     <div className="rounded-2xl border border-border bg-bg px-4 py-3 text-xs text-muted">
                       Variaveis disponiveis: {"{{aluno_nome}} {{plano_nome}} {{plano_valor}} {{plano_duracao}} {{plano_qtd_aulas_semanais}} {{professor_nome}} {{empresa_razao_social}} {{empresa_cnpj}} {{empresa_endereco}} {{empresa_cidade}} {{empresa_uf}} {{data_hoje}}"}
+                    </div>
+                  </>
+                ) : entidade === "contas_pagar" ? (
+                  <>
+                    <div className="space-y-1">
+                      <p className="text-xs font-medium uppercase tracking-wide text-muted">Valor</p>
+                      <Input value={contaPagarValor} onChange={(e) => setContaPagarValor(e.target.value)} placeholder="100,00" />
+                      <div className="text-xs text-muted">
+                        {Number(String(contaPagarValor || "0").replace(",", ".") || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-xs font-medium uppercase tracking-wide text-muted">Vencimento</p>
+                      <Input type="date" value={contaPagarVencimento} onChange={(e) => setContaPagarVencimento(e.target.value)} />
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-xs font-medium uppercase tracking-wide text-muted">Categoria</p>
+                      <select
+                        value={contaPagarCategoria}
+                        onChange={(e) => {
+                          setContaPagarCategoria(e.target.value);
+                          setContaPagarSubcategoria("");
+                        }}
+                        className="h-12 w-full rounded-2xl border border-border bg-white px-4 text-text outline-none"
+                      >
+                        <option value="">Selecione</option>
+                        {categoriasApi
+                          .filter((c) => c.status === "ativo" && c.tipo === "Despesa")
+                          .map((c) => (
+                            <option key={c.id} value={c.nome}>
+                              {c.nome}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-xs font-medium uppercase tracking-wide text-muted">Subcategoria</p>
+                      <select
+                        value={contaPagarSubcategoria}
+                        onChange={(e) => setContaPagarSubcategoria(e.target.value)}
+                        className="h-12 w-full rounded-2xl border border-border bg-white px-4 text-text outline-none"
+                      >
+                        <option value="">Selecione</option>
+                        {subcategoriasFiltradasContaPagar
+                          .filter((s) => s.status === "ativo")
+                          .map((s) => (
+                            <option key={s.id} value={s.nome}>
+                              {s.nome}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+                    <div className="rounded-2xl border border-border bg-bg px-4 py-3 text-sm text-text">
+                      <label className="flex items-center justify-between gap-3">
+                        <span className="text-sm font-medium">Recorrencia mensal</span>
+                        <input type="checkbox" checked={contaPagarRecorrencia} onChange={(e) => setContaPagarRecorrencia(e.target.checked)} />
+                      </label>
+                      {contaPagarRecorrencia && (
+                        <div className="mt-3 space-y-1">
+                          <p className="text-xs font-medium uppercase tracking-wide text-muted">Quantidade de recorrencias</p>
+                          <Input value={contaPagarQtdRecorrencias} onChange={(e) => setContaPagarQtdRecorrencias(e.target.value)} placeholder="Ex: 6" />
+                          <div className="text-xs text-muted">Vai lancar 1 por mes, a partir do vencimento informado.</div>
+                        </div>
+                      )}
                     </div>
                   </>
                 ) : (
