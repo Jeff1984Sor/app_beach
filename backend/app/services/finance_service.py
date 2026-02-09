@@ -4,6 +4,56 @@ from datetime import date, timedelta
 from app.models.entities import Aula, ContaReceber, ContaPagar, RegraComissao
 
 
+async def ensure_contas_receber_columns(db: AsyncSession):
+    await db.execute(
+        text(
+            """
+            DO $$
+            BEGIN
+              IF NOT EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'contas_receber' AND column_name = 'data_pagamento'
+              ) THEN
+                ALTER TABLE contas_receber ADD COLUMN data_pagamento DATE;
+              END IF;
+              IF NOT EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'contas_receber' AND column_name = 'conta_bancaria_id'
+              ) THEN
+                ALTER TABLE contas_receber ADD COLUMN conta_bancaria_id INTEGER;
+              END IF;
+            END $$;
+            """
+        )
+    )
+    await db.commit()
+
+
+async def ensure_movimentos_columns(db: AsyncSession):
+    await db.execute(
+        text(
+            """
+            DO $$
+            BEGIN
+              IF NOT EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'movimentos_bancarios' AND column_name = 'categoria'
+              ) THEN
+                ALTER TABLE movimentos_bancarios ADD COLUMN categoria VARCHAR(120);
+              END IF;
+              IF NOT EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'movimentos_bancarios' AND column_name = 'subcategoria'
+              ) THEN
+                ALTER TABLE movimentos_bancarios ADD COLUMN subcategoria VARCHAR(120);
+              END IF;
+            END $$;
+            """
+        )
+    )
+    await db.commit()
+
+
 async def gerar_comissao(db: AsyncSession):
     hoje = date.today()
     inicio_mes_atual = hoje.replace(day=1)
@@ -56,6 +106,10 @@ async def gerar_comissao(db: AsyncSession):
 
 
 async def dre(db: AsyncSession):
+    # Avoid 500s on fresh DBs where dynamic columns were not created yet.
+    await ensure_contas_receber_columns(db)
+    await ensure_movimentos_columns(db)
+
     receita = float((await db.scalar(select(func.sum(ContaReceber.valor)).where(ContaReceber.status == "pago"))) or 0)
     despesas = float((await db.scalar(select(func.sum(ContaPagar.valor)))) or 0)
     custo_aulas = float((await db.scalar(select(func.sum(Aula.valor)).where(Aula.status == "realizada"))) or 0)

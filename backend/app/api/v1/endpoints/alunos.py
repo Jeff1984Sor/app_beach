@@ -210,7 +210,7 @@ async def slot_em_conflito(db: AsyncSession, professor_id: int, inicio_dt: datet
                 SELECT hora_inicio, hora_fim
                 FROM agenda_bloqueios
                 WHERE data = :data
-                  AND LOWER(COALESCE(status, \"ativo\")) = \"ativo\"
+                  AND LOWER(COALESCE(status, 'ativo')) = 'ativo'
                   AND (profissional_id IS NULL OR profissional_id = :profissional_id)
                 """
             ),

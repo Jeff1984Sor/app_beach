@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user
 from app.db.session import get_db
 from app.models.entities import Usuario, Role, Aula, ContaReceber, Aluno, Profissional
+from app.services.finance_service import ensure_contas_receber_columns
 
 router = APIRouter(prefix="/home", tags=["home"])
 
@@ -19,6 +20,7 @@ def brl(v: float) -> str:
 
 @router.get("/kpis")
 async def home_kpis(user: Usuario = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    await ensure_contas_receber_columns(db)
     hoje = date.today()
     agora = datetime.utcnow()
     inicio_mes = hoje.replace(day=1)
