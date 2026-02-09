@@ -184,7 +184,14 @@ async def ensure_bloqueios_table(db: AsyncSession):
     await db.commit()
 
 
-async def slot_em_conflito(db: AsyncSession, professor_id: int, inicio_dt: datetime, fim_dt: datetime, ignore_aula_id: int | None = None):
+async def slot_em_conflito(
+    db: AsyncSession,
+    professor_id: int,
+    inicio_dt: datetime,
+    fim_dt: datetime,
+    unidade_id: int | None = None,
+    ignore_aula_id: int | None = None,
+):
     conflito_aula_q = select(Aula).where(
         Aula.professor_id == professor_id,
         Aula.inicio < fim_dt,
@@ -212,9 +219,10 @@ async def slot_em_conflito(db: AsyncSession, professor_id: int, inicio_dt: datet
                 WHERE data = :data
                   AND LOWER(COALESCE(status, 'ativo')) = 'ativo'
                   AND (profissional_id IS NULL OR profissional_id = :profissional_id)
+                  AND (:unidade_id IS NULL OR unidade_id IS NULL OR unidade_id = :unidade_id)
                 """
             ),
-            {"data": inicio_br.date(), "profissional_id": professor_id},
+            {"data": inicio_br.date(), "profissional_id": professor_id, "unidade_id": unidade_id},
         )
     ).all()
     inicio_min = inicio_br.hour * 60 + inicio_br.minute
@@ -235,14 +243,20 @@ def gerar_horas_cheias(inicio_h: int = 7, fim_h: int = 21) -> list[str]:
     return [f"{h:02d}:00" for h in range(inicio_h, fim_h + 1)]
 
 
-async def listar_horarios_disponiveis(db: AsyncSession, professor_id: int, data_ref: date, duracao_min: int = 60) -> list[str]:
+async def listar_horarios_disponiveis(
+    db: AsyncSession,
+    professor_id: int,
+    data_ref: date,
+    duracao_min: int = 60,
+    unidade_id: int | None = None,
+) -> list[str]:
     horas = gerar_horas_cheias()
     livres: list[str] = []
     for hhmm in horas:
         hh, mm = hhmm.split(":")
         ini = br_local_to_utc(data_ref, hhmm)
         fim = ini + timedelta(minutes=max(30, duracao_min))
-        conflito = await slot_em_conflito(db, professor_id, ini, fim)
+        conflito = await slot_em_conflito(db, professor_id, ini, fim, unidade_id=unidade_id)
         if not conflito:
             livres.append(hhmm)
     return livres
@@ -730,7 +744,7 @@ async def criar_reservas_contrato(aluno_id: int, contrato_id: int, payload: dict
                 )
             )
             if not existe:
-                conflito = await slot_em_conflito(db, prof.id, inicio_dt, fim_dt)
+                conflito = await slot_em_conflito(db, prof.id, inicio_dt, fim_dt, unidade_id=unidade.id)
                 if conflito:
                     conflitos.append(f"{data_cursor.strftime('%d/%m/%Y')} {hora_inicio_txt} - {conflito}")
                     data_cursor += timedelta(days=1)
@@ -776,7 +790,14 @@ async def disponibilidade_aula_avulsa(
     if not prof:
         raise HTTPException(status_code=400, detail="Sem professor cadastrado")
 
-    horarios = await listar_horarios_disponiveis(db, prof.id, data_ref, duracao_minutos)
+    d = await get_details(db, aluno_id)
+    unidade_id = None
+    try:
+        unidade_id = int(d.get("unidade_id")) if d.get("unidade_id") is not None else None
+    except Exception:
+        unidade_id = None
+
+    horarios = await listar_horarios_disponiveis(db, prof.id, data_ref, duracao_minutos, unidade_id=unidade_id)
     return {"professor_id": prof.id, "data": data_ref.strftime("%Y-%m-%d"), "horarios_livres": horarios}
 
 
@@ -806,10 +827,6 @@ async def criar_aula_avulsa(aluno_id: int, payload: dict, db: AsyncSession = Dep
     prof = await db.scalar(select(Profissional).where(Profissional.id == int(professor_id)))
     if not prof:
         raise HTTPException(status_code=404, detail="Professor nao encontrado")
-    fim = ini + timedelta(minutes=max(30, duracao_min))
-    conflito = await slot_em_conflito(db, prof.id, ini, fim)
-    if conflito:
-        raise HTTPException(status_code=409, detail=conflito)
 
     unidade_nome = payload.get("unidade")
     unidade = await db.scalar(select(Unidade).where(Unidade.nome == unidade_nome)) if unidade_nome else None
@@ -819,6 +836,11 @@ async def criar_aula_avulsa(aluno_id: int, payload: dict, db: AsyncSession = Dep
         unidade = Unidade(nome=unidade_nome or "Unidade Padrao", cep="00000000", endereco="Nao informado")
         db.add(unidade)
         await db.flush()
+
+    fim = ini + timedelta(minutes=max(30, duracao_min))
+    conflito = await slot_em_conflito(db, prof.id, ini, fim, unidade_id=unidade.id)
+    if conflito:
+        raise HTTPException(status_code=409, detail=conflito)
 
     agenda = await db.scalar(select(Agenda).where(Agenda.unidade_id == unidade.id, Agenda.data == data_ref))
     if not agenda:
@@ -873,13 +895,20 @@ async def reagendar_aula(aluno_id: int, aula_id: int, payload: dict, db: AsyncSe
     if not prof_final:
         raise HTTPException(status_code=400, detail="Professor invalido")
 
-    conflito = await slot_em_conflito(db, prof_final.id, novo_inicio, novo_fim, ignore_aula_id=aula.id)
-    if conflito:
-        raise HTTPException(status_code=409, detail=conflito)
-
     agenda_atual = await db.get(Agenda, aula.agenda_id)
     if not agenda_atual:
         raise HTTPException(status_code=400, detail="Agenda da aula nao encontrada")
+
+    conflito = await slot_em_conflito(
+        db,
+        prof_final.id,
+        novo_inicio,
+        novo_fim,
+        unidade_id=agenda_atual.unidade_id,
+        ignore_aula_id=aula.id,
+    )
+    if conflito:
+        raise HTTPException(status_code=409, detail=conflito)
 
     agenda_destino = await db.scalar(select(Agenda).where(Agenda.unidade_id == agenda_atual.unidade_id, Agenda.data == data_base))
     if not agenda_destino:
