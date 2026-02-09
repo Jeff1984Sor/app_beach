@@ -84,6 +84,7 @@ export default function AlunoFichaPage() {
   const [diasSemana, setDiasSemana] = useState<string[]>([]);
   const [dataFimPreview, setDataFimPreview] = useState("");
   const [horaAula, setHoraAula] = useState("");
+  const [contratoProfessorId, setContratoProfessorId] = useState("");
   const [editingContratoId, setEditingContratoId] = useState<number | null>(null);
   const [msgContrato, setMsgContrato] = useState<string>("");
   const [openReagendar, setOpenReagendar] = useState(false);
@@ -287,6 +288,10 @@ export default function AlunoFichaPage() {
       setMsgContrato("Selecione o horario.");
       return;
     }
+    if (!contratoProfessorId) {
+      setMsgContrato("Selecione o professor do contrato.");
+      return;
+    }
     setMsgContrato("");
     const url = editingContratoId
       ? `${API_URL}/alunos/${data.id}/contratos/${editingContratoId}`
@@ -302,6 +307,7 @@ export default function AlunoFichaPage() {
         qtd_aulas_semanais: Number(qtdAulas || 0),
         data_inicio: dataInicio,
         dias_semana: diasSemana,
+        professor_id: Number(contratoProfessorId),
       }),
     });
     if (!res.ok) return;
@@ -316,6 +322,7 @@ export default function AlunoFichaPage() {
           hora_inicio: horaAula,
           duracao_minutos: 60,
           unidade: data.unidade,
+          professor_id: Number(contratoProfessorId),
         }),
       });
       if (!reservaRes.ok) {
@@ -402,7 +409,8 @@ export default function AlunoFichaPage() {
     setEditingContratoId(c.id);
     selecionarPlano(c.plano);
     setDataInicio(c.inicio_iso || new Date().toISOString().slice(0, 10));
-    setDiasSemana(c.dias_semana?.length ? c.dias_semana : ["Seg", "Qua", "Sex"]);
+    setDiasSemana(c.dias_semana?.length ? c.dias_semana : []);
+    setContratoProfessorId(c.professor_id ? String(c.professor_id) : "");
     setOpenContrato(true);
   }
 
@@ -642,7 +650,53 @@ export default function AlunoFichaPage() {
               </div>
             </Section>
           )}
-          {tab === "Contratos" && <Section title="Contratos"><div className="mb-3"><Button onClick={() => { setEditingContratoId(null); setPlanoNome(""); setValor(""); setRecorrencia(""); setQtdAulas(""); setDataInicio(""); setHoraAula(""); setDiasSemana([]); setMsgContrato(""); setOpenContrato(true); }}>Novo contrato</Button></div><div className="space-y-3">{data.contratos.map((c: any) => <Card key={c.id} className="space-y-2 p-4"><div className="flex items-start justify-between gap-2"><div><p className="text-lg font-semibold">{c.plano}</p><p className="text-sm text-muted">Inicio: {c.inicio} • Fim: {c.fim}</p></div><div className="flex items-center gap-2"><button onClick={() => abrirEdicaoContrato(c)} className="rounded-xl border border-border p-2 text-muted hover:bg-bg"><Pencil size={14} /></button><button onClick={() => deletarContrato(c.id)} className="rounded-xl border border-border p-2 text-danger hover:bg-danger/10"><Trash2 size={14} /></button></div></div><div className="flex items-center justify-between"><Badge tone="success">{c.status}</Badge></div></Card>)}</div></Section>}
+          {tab === "Contratos" && (
+            <Section title="Contratos">
+              <div className="mb-3">
+                <Button
+                  onClick={() => {
+                    setEditingContratoId(null);
+                    setPlanoNome("");
+                    setValor("");
+                    setRecorrencia("");
+                    setQtdAulas("");
+                    setDataInicio("");
+                    setHoraAula("");
+                    setDiasSemana([]);
+                    setContratoProfessorId("");
+                    setMsgContrato("");
+                    setOpenContrato(true);
+                  }}
+                >
+                  Novo contrato
+                </Button>
+              </div>
+              <div className="space-y-3">
+                {data.contratos.map((c: any) => (
+                  <Card key={c.id} className="space-y-2 p-4">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="text-lg font-semibold">{c.plano}</p>
+                        <p className="text-sm text-muted">Inicio: {c.inicio} • Fim: {c.fim}</p>
+                        {c.professor_nome ? <p className="text-sm text-muted">Professor: {c.professor_nome}</p> : null}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button onClick={() => abrirEdicaoContrato(c)} className="rounded-xl border border-border p-2 text-muted hover:bg-bg">
+                          <Pencil size={14} />
+                        </button>
+                        <button onClick={() => deletarContrato(c.id)} className="rounded-xl border border-border p-2 text-danger hover:bg-danger/10">
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <Badge tone="success">{c.status}</Badge>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            </Section>
+          )}
           {tab === "WhatsApp" && <Section title="WhatsApp"><div className="space-y-3">{data.mensagens.map((m: any) => <Card key={m.id} className="space-y-1 p-4"><p className="text-sm">{m.texto}</p><div className="flex items-center justify-between text-xs text-muted"><span>{m.quando}</span><span>{m.status}</span></div></Card>)}</div></Section>}
         </motion.div>
       </AnimatePresence>
@@ -684,6 +738,16 @@ export default function AlunoFichaPage() {
             {planos.map((p) => (
               <option key={p.nome} value={p.nome}>{p.nome}</option>
             ))}
+          </select>
+
+          <p className="text-xs font-medium uppercase tracking-wide text-muted">Professor</p>
+          <select
+            value={contratoProfessorId}
+            onChange={(e) => setContratoProfessorId(e.target.value)}
+            className="h-12 w-full rounded-2xl border border-border bg-white px-4 text-text outline-none"
+          >
+            <option value="">Selecione o professor</option>
+            {professores.map((p: any) => <option key={p.id} value={p.id}>{p.nome}</option>)}
           </select>
 
           <p className="text-xs font-medium uppercase tracking-wide text-muted">Valor</p>

@@ -55,6 +55,7 @@ async def ensure_contracts_table(db: AsyncSession):
     CREATE TABLE IF NOT EXISTS aluno_contratos (
       id SERIAL PRIMARY KEY,
       aluno_id INTEGER NOT NULL,
+      professor_id INTEGER,
       plano_nome VARCHAR(120) NOT NULL,
       recorrencia VARCHAR(20) NOT NULL,
       valor NUMERIC(10,2) NOT NULL,
@@ -65,6 +66,21 @@ async def ensure_contracts_table(db: AsyncSession):
       status VARCHAR(20) DEFAULT 'ativo'
     )
     """))
+    await db.execute(
+        text(
+            """
+            DO $$
+            BEGIN
+              IF NOT EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'aluno_contratos' AND column_name = 'professor_id'
+              ) THEN
+                ALTER TABLE aluno_contratos ADD COLUMN professor_id INTEGER;
+              END IF;
+            END $$;
+            """
+        )
+    )
     await db.commit()
 
 
@@ -309,10 +325,15 @@ async def ficha_aluno(aluno_id: int, db: AsyncSession = Depends(get_db)):
         await db.execute(
             text(
                 """
-                SELECT id, plano_nome, data_inicio, data_fim, status, recorrencia, valor, qtd_aulas_semanais, dias_semana
+                SELECT c.id, c.plano_nome, c.data_inicio, c.data_fim, c.status, c.recorrencia, c.valor, c.qtd_aulas_semanais, c.dias_semana,
+                       c.professor_id,
+                       COALESCE(u.nome, '') AS professor_nome
                 FROM aluno_contratos
-                WHERE aluno_id = :id
-                ORDER BY id DESC
+                c
+                LEFT JOIN profissionais p ON p.id = c.professor_id
+                LEFT JOIN usuarios u ON u.id = p.usuario_id
+                WHERE c.aluno_id = :id
+                ORDER BY c.id DESC
                 """
             ),
             {"id": aluno_id},
@@ -363,6 +384,8 @@ async def ficha_aluno(aluno_id: int, db: AsyncSession = Depends(get_db)):
                 "qtd_aulas_semanais": int(c[7] or 0),
                 "dias_semana": [d for d in (c[8] or "").split(",") if d],
                 "inicio_iso": c[2].strftime("%Y-%m-%d") if c[2] else None,
+                "professor_id": c[9],
+                "professor_nome": c[10] or "",
             }
             for c in contratos_rows
         ],
@@ -447,6 +470,7 @@ async def criar_contrato(aluno_id: int, payload: dict, db: AsyncSession = Depend
         raise HTTPException(status_code=404, detail="Aluno nao encontrado")
 
     plano_nome = payload.get("plano_nome") or "Plano Mensal"
+    professor_id = payload.get("professor_id")
     recorrencia = (payload.get("recorrencia") or "mensal").lower()
     valor = float(payload.get("valor") or 0)
     qtd_aulas_semanais = int(payload.get("qtd_aulas_semanais") or 0)
@@ -463,12 +487,13 @@ async def criar_contrato(aluno_id: int, payload: dict, db: AsyncSession = Depend
     contrato_row = (
         await db.execute(
             text("""
-            INSERT INTO aluno_contratos (aluno_id, plano_nome, recorrencia, valor, qtd_aulas_semanais, data_inicio, data_fim, dias_semana, status)
-            VALUES (:aluno_id, :plano_nome, :recorrencia, :valor, :qtd_aulas_semanais, :data_inicio, :data_fim, :dias_semana, 'ativo')
+            INSERT INTO aluno_contratos (aluno_id, professor_id, plano_nome, recorrencia, valor, qtd_aulas_semanais, data_inicio, data_fim, dias_semana, status)
+            VALUES (:aluno_id, :professor_id, :plano_nome, :recorrencia, :valor, :qtd_aulas_semanais, :data_inicio, :data_fim, :dias_semana, 'ativo')
             RETURNING id
             """),
             {
                 "aluno_id": aluno_id,
+                "professor_id": int(professor_id) if professor_id else None,
                 "plano_nome": plano_nome,
                 "recorrencia": recorrencia,
                 "valor": valor,
@@ -512,6 +537,7 @@ async def atualizar_contrato(aluno_id: int, contrato_id: int, payload: dict, db:
         raise HTTPException(status_code=404, detail="Contrato nao encontrado")
 
     plano_nome = payload.get("plano_nome") or "Plano Mensal"
+    professor_id = payload.get("professor_id")
     recorrencia = (payload.get("recorrencia") or "mensal").lower()
     valor = float(payload.get("valor") or 0)
     qtd_aulas_semanais = int(payload.get("qtd_aulas_semanais") or 0)
@@ -527,7 +553,8 @@ async def atualizar_contrato(aluno_id: int, contrato_id: int, payload: dict, db:
         text(
             """
             UPDATE aluno_contratos
-            SET plano_nome = :plano_nome,
+            SET professor_id = :professor_id,
+                plano_nome = :plano_nome,
                 recorrencia = :recorrencia,
                 valor = :valor,
                 qtd_aulas_semanais = :qtd_aulas_semanais,
@@ -538,6 +565,7 @@ async def atualizar_contrato(aluno_id: int, contrato_id: int, payload: dict, db:
             """
         ),
         {
+            "professor_id": int(professor_id) if professor_id else None,
             "plano_nome": plano_nome,
             "recorrencia": recorrencia,
             "valor": valor,
@@ -595,7 +623,7 @@ async def criar_reservas_contrato(aluno_id: int, contrato_id: int, payload: dict
         await db.execute(
             text(
                 """
-                SELECT id, data_inicio, data_fim, valor, dias_semana
+                SELECT id, data_inicio, data_fim, valor, dias_semana, professor_id
                 FROM aluno_contratos
                 WHERE id = :contrato_id AND aluno_id = :aluno_id
                 """
@@ -629,7 +657,7 @@ async def criar_reservas_contrato(aluno_id: int, contrato_id: int, payload: dict
         db.add(unidade)
         await db.flush()
 
-    professor_id = payload.get("professor_id")
+    professor_id = payload.get("professor_id") or contrato[5]
     prof = None
     if professor_id:
         try:
