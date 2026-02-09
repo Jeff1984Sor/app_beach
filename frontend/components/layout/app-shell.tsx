@@ -13,20 +13,20 @@ const items = [
 ];
 
 const tabelas = [
-  { nome: "Usuarios", href: "/usuarios" },
   { nome: "Alunos", href: "/alunos" },
-  { nome: "Unidades", href: "/configuracoes?entidade=unidades" },
   { nome: "Agenda", href: "/agenda" },
-  { nome: "Contas Receber", href: "/configuracoes?entidade=contas_receber" },
-  { nome: "Contas Pagar", href: "/configuracoes?entidade=contas_pagar" },
-  { nome: "Regras Comissao", href: "/configuracoes?entidade=regras_comissao" },
-  { nome: "Plano", href: "/configuracoes?entidade=plano" },
-  { nome: "Conta Bancaria", href: "/configuracoes?entidade=conta_bancaria" },
-  { nome: "Movimentacoes Financeiras", href: "/configuracoes?entidade=movimentacoes_financeiras" },
   { nome: "Categoria", href: "/configuracoes?entidade=categoria" },
-  { nome: "Subcategoria", href: "/configuracoes?entidade=subcategoria" },
-  { nome: "Modelo de Contrato", href: "/configuracoes?entidade=modelo_contrato" },
+  { nome: "Conta Bancaria", href: "/configuracoes?entidade=conta_bancaria" },
+  { nome: "Contas Pagar", href: "/configuracoes?entidade=contas_pagar" },
+  { nome: "Contas Receber", href: "/configuracoes?entidade=contas_receber" },
   { nome: "Media Files", href: "/configuracoes?entidade=media_files" },
+  { nome: "Modelo de Contrato", href: "/configuracoes?entidade=modelo_contrato" },
+  { nome: "Movimentacoes Financeiras", href: "/configuracoes?entidade=movimentacoes_financeiras" },
+  { nome: "Plano", href: "/configuracoes?entidade=plano" },
+  { nome: "Regras Comissao", href: "/configuracoes?entidade=regras_comissao" },
+  { nome: "Subcategoria", href: "/configuracoes?entidade=subcategoria" },
+  { nome: "Unidades", href: "/configuracoes?entidade=unidades" },
+  { nome: "Usuarios", href: "/usuarios" },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
