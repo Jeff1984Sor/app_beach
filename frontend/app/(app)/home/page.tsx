@@ -1,10 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, CalendarDays, CreditCard, TrendingUp, Users } from "lucide-react";
+import { useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { ArrowRight, CalendarDays, CheckCircle2, CreditCard, PhoneOff, TrendingUp, Users, XCircle } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Section } from "@/components/ui/section";
+import { Modal } from "@/components/ui/modal";
 import { useAuthStore } from "@/store/auth";
 
 type Kpi = { label: string; value: string };
@@ -20,6 +22,7 @@ type AgendaAula = {
 };
 type ContaReceber = {
   id: number;
+  aluno_id?: number;
   aluno_nome: string;
   plano_nome: string;
   valor: number;
@@ -46,12 +49,14 @@ export default function HomePage() {
   const role = useAuthStore((s) => s.role) || "gestor";
   const nome = useAuthStore((s) => s.nome) || "Visitante";
   const token = useAuthStore((s) => s.token);
+  const qc = useQueryClient();
+  const authHeaders = useMemo(() => (token ? { Authorization: `Bearer ${token}` } : undefined), [token]);
 
   const { data, isLoading } = useQuery<{ kpis: Kpi[] }>({
     queryKey: ["home-kpis", role],
     queryFn: async () => {
       const res = await fetch(`${API_URL}/home/kpis`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        headers: authHeaders,
         cache: "no-store",
       });
       if (!res.ok) return { kpis: [] };
@@ -65,7 +70,7 @@ export default function HomePage() {
     queryFn: async () => {
       const d = todayIso();
       const qs = new URLSearchParams({ data_inicio: d, data_fim: d, _ts: String(Date.now()) });
-      const res = await fetch(`${API_URL}/agenda/periodo?${qs.toString()}`, { cache: "no-store" });
+      const res = await fetch(`${API_URL}/agenda/periodo?${qs.toString()}`, { cache: "no-store", headers: authHeaders });
       if (!res.ok) return { aulas: [] };
       const body = await res.json();
       return { aulas: (body.aulas || []) as AgendaAula[] };
@@ -76,12 +81,60 @@ export default function HomePage() {
   const { data: pendencias, isLoading: pendLoading } = useQuery<ContaReceber[]>({
     queryKey: ["home-contas-receber-aberto"],
     queryFn: async () => {
-      const res = await fetch(`${API_URL}/contas-receber?status=aberto`, { cache: "no-store" });
+      const res = await fetch(`${API_URL}/contas-receber?status=aberto`, { cache: "no-store", headers: authHeaders });
       if (!res.ok) return [];
       return res.json();
     },
     enabled: !!token && role === "gestor",
   });
+
+  const [savingAula, setSavingAula] = useState<number | null>(null);
+  async function atualizarStatusAula(a: AgendaAula, status: "realizada" | "falta_aviso" | "falta") {
+    if (!a.aluno_id) return;
+    setSavingAula(a.id);
+    try {
+      const res = await fetch(`${API_URL}/alunos/${a.aluno_id}/aulas/${a.id}/status`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", ...(authHeaders || {}) },
+        body: JSON.stringify({ status }),
+      });
+      if (!res.ok) return;
+      await qc.invalidateQueries({ queryKey: ["home-agenda-hoje"] });
+      await qc.invalidateQueries({ queryKey: ["home-kpis"] });
+    } finally {
+      setSavingAula(null);
+    }
+  }
+
+  const [pagarOpen, setPagarOpen] = useState(false);
+  const [pagarConta, setPagarConta] = useState<ContaReceber | null>(null);
+  const [dataPagamento, setDataPagamento] = useState(todayIso());
+  const [paying, setPaying] = useState(false);
+
+  function abrirPagar(c: ContaReceber) {
+    setPagarConta(c);
+    setDataPagamento(todayIso());
+    setPagarOpen(true);
+  }
+
+  async function confirmarPagamento() {
+    if (!pagarConta) return;
+    setPaying(true);
+    try {
+      const res = await fetch(`${API_URL}/contas-receber/${pagarConta.id}/pagar`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(authHeaders || {}) },
+        body: JSON.stringify({ data_pagamento: dataPagamento }),
+      });
+      if (!res.ok) return;
+      setPagarOpen(false);
+      setPagarConta(null);
+      await qc.invalidateQueries({ queryKey: ["home-contas-receber-aberto"] });
+      await qc.invalidateQueries({ queryKey: ["home-kpis"] });
+    } finally {
+      setPaying(false);
+    }
+  }
 
   const kpis = data?.kpis || [];
   const aulasHoje = (agendaHoje?.aulas || []).slice(0, 6);
@@ -146,7 +199,39 @@ export default function HomePage() {
                       <p className="text-sm font-semibold text-text">{a.data_br || todayIso()} • {a.hora_br || "--:--"}</p>
                       <p className="truncate text-sm text-muted">{a.professor_nome} {a.unidade ? `• ${a.unidade}` : ""}</p>
                     </div>
-                    <span className="rounded-full bg-primary/10 px-3 py-1 text-xs text-primary">{a.status || "agendada"}</span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        disabled={savingAula === a.id}
+                        onClick={() => atualizarStatusAula(a, "realizada")}
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-2xl border border-border bg-white text-success disabled:opacity-50"
+                        aria-label="Marcar como realizada"
+                        title="Realizada"
+                      >
+                        <CheckCircle2 size={18} />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={savingAula === a.id}
+                        onClick={() => atualizarStatusAula(a, "falta_aviso")}
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-2xl border border-border bg-white text-primary disabled:opacity-50"
+                        aria-label="Marcar falta avisada"
+                        title="Falta avisada"
+                      >
+                        <PhoneOff size={18} />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={savingAula === a.id}
+                        onClick={() => atualizarStatusAula(a, "falta")}
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-2xl border border-border bg-white text-danger disabled:opacity-50"
+                        aria-label="Marcar falta"
+                        title="Falta"
+                      >
+                        <XCircle size={18} />
+                      </button>
+                      <span className="rounded-full bg-primary/10 px-3 py-1 text-xs text-primary">{a.status || "agendada"}</span>
+                    </div>
                   </div>
                 ))}
             </div>
@@ -175,9 +260,18 @@ export default function HomePage() {
                         <p className="truncate font-semibold text-text">{c.aluno_nome}</p>
                         <p className="truncate text-sm text-muted">{c.plano_nome || "Sem plano"} • Venc: {c.vencimento}</p>
                       </div>
-                      <p className="shrink-0 font-semibold text-text">
-                        {Number(c.valor || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
-                      </p>
+                      <div className="shrink-0 text-right">
+                        <p className="font-semibold text-text">
+                          {Number(c.valor || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => abrirPagar(c)}
+                          className="mt-2 inline-flex h-9 items-center rounded-2xl bg-success px-4 text-sm font-semibold text-white shadow-soft"
+                        >
+                          Pagar
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -202,6 +296,39 @@ export default function HomePage() {
           </Link>
         </div>
       )}
+
+      <Modal
+        open={pagarOpen}
+        title="Dar baixa (Conta a Receber)"
+        onClose={() => {
+          if (paying) return;
+          setPagarOpen(false);
+        }}
+      >
+        <div className="space-y-3">
+          <div>
+            <p className="text-sm font-semibold text-text">{pagarConta?.aluno_nome || ""}</p>
+            <p className="text-sm text-muted">{pagarConta?.plano_nome || "Sem plano"}</p>
+          </div>
+          <label className="block">
+            <span className="text-xs font-semibold uppercase tracking-wide text-muted">Data de pagamento</span>
+            <input
+              type="date"
+              value={dataPagamento}
+              onChange={(e) => setDataPagamento(e.target.value)}
+              className="mt-2 h-12 w-full rounded-2xl border border-border bg-white px-4 text-sm outline-none focus:ring-2 focus:ring-primary/30"
+            />
+          </label>
+          <button
+            type="button"
+            disabled={paying}
+            onClick={confirmarPagamento}
+            className="inline-flex h-12 w-full items-center justify-center rounded-2xl bg-primary text-sm font-semibold text-white shadow-soft disabled:opacity-60"
+          >
+            {paying ? "Pagando..." : "Confirmar pagamento"}
+          </button>
+        </div>
+      </Modal>
     </main>
   );
 }
