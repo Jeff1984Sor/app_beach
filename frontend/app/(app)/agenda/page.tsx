@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarDays, CheckCircle2, Lock, MinusCircle, PhoneCall, Search } from "lucide-react";
+import { CalendarDays, CheckCircle2, Lock, MinusCircle, PhoneCall, Search, Pencil } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Section } from "@/components/ui/section";
@@ -40,13 +40,14 @@ type BloqueioApi = {
 type MeResponse = { id: number; nome: string; role: "gestor" | "professor" | "aluno" };
 
 function addDays(baseIso: string, daysToAdd: number): string {
-  const d = new Date(`${baseIso}T00:00:00`);
+  // Use UTC to avoid off-by-one when server/browser isn't in Brazil timezone.
+  const d = new Date(`${baseIso}T00:00:00Z`);
   d.setDate(d.getDate() + daysToAdd);
   return d.toISOString().slice(0, 10);
 }
 
 function startOfWeekIso(baseIso: string): string {
-  const d = new Date(`${baseIso}T00:00:00`);
+  const d = new Date(`${baseIso}T00:00:00Z`);
   const dow = d.getDay();
   const diff = dow === 0 ? -6 : 1 - dow;
   d.setDate(d.getDate() + diff);
@@ -54,13 +55,13 @@ function startOfWeekIso(baseIso: string): string {
 }
 
 function startOfMonthIso(baseIso: string): string {
-  const d = new Date(`${baseIso}T00:00:00`);
+  const d = new Date(`${baseIso}T00:00:00Z`);
   d.setDate(1);
   return d.toISOString().slice(0, 10);
 }
 
 function daysInMonth(baseIso: string): number {
-  const d = new Date(`${baseIso}T00:00:00`);
+  const d = new Date(`${baseIso}T00:00:00Z`);
   return new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
 }
 
@@ -78,6 +79,10 @@ function formatDateTimeBR(iso: string): { data: string; hora: string } {
     minute: "2-digit",
   }).format(dt);
   return { data: fmtData, hora: fmtHora };
+}
+
+function todayIso(): string {
+  return new Date().toISOString().slice(0, 10);
 }
 
 function statusMeta(statusRaw: string) {
@@ -103,6 +108,14 @@ export default function AgendaPage() {
   const [bloqHoraFim, setBloqHoraFim] = useState("19:00");
   const [bloqMotivo, setBloqMotivo] = useState("");
   const [bloqDias, setBloqDias] = useState<string[]>([]);
+  const [openEditar, setOpenEditar] = useState(false);
+  const [aulaEditId, setAulaEditId] = useState<number | null>(null);
+  const [aulaEditAlunoId, setAulaEditAlunoId] = useState<number | null>(null);
+  const [aulaEditData, setAulaEditData] = useState("");
+  const [aulaEditHora, setAulaEditHora] = useState("");
+  const [aulaEditProfessorId, setAulaEditProfessorId] = useState("");
+  const [editMsg, setEditMsg] = useState<string | null>(null);
+  const [editLoading, setEditLoading] = useState(false);
 
   const { data: me } = useQuery<MeResponse | null>({
     queryKey: ["auth-me-agenda"],
@@ -184,6 +197,62 @@ export default function AgendaPage() {
     if (!res.ok) return;
     qc.invalidateQueries({ queryKey: ["agenda-v2"] });
     qc.invalidateQueries({ queryKey: ["aluno-ficha", String(alunoId)] });
+  }
+
+  function abrirEditar(aula: AulaApi) {
+    setAulaEditId(aula.id);
+    setAulaEditAlunoId(aula.aluno_id || null);
+    setAulaEditProfessorId(aula.professor_id ? String(aula.professor_id) : "");
+    const baseData = aula.data_br;
+    if (baseData && baseData.includes("/")) {
+      const [dd, mm, yyyy] = baseData.split("/");
+      setAulaEditData(dd && mm && yyyy ? `${yyyy}-${mm}-${dd}` : todayIso());
+    } else {
+      setAulaEditData(todayIso());
+    }
+    setAulaEditHora(aula.hora_br || "");
+    setEditMsg(null);
+    setOpenEditar(true);
+  }
+
+  async function salvarEditar() {
+    if (!aulaEditId || !aulaEditAlunoId) {
+      setEditMsg("Esta aula nao possui aluno vinculado para editar.");
+      return;
+    }
+    if (!aulaEditProfessorId || !aulaEditData || !aulaEditHora) {
+      setEditMsg("Preencha professor, data e horario.");
+      return;
+    }
+    setEditLoading(true);
+    setEditMsg(null);
+    const ctrl = new AbortController();
+    const to = window.setTimeout(() => ctrl.abort(), 15000);
+    try {
+      const res = await fetch(`${API_URL}/alunos/${aulaEditAlunoId}/aulas/${aulaEditId}/reagendar`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          data: aulaEditData,
+          hora: aulaEditHora,
+          professor_id: Number(aulaEditProfessorId),
+        }),
+        signal: ctrl.signal,
+      });
+      if (!res.ok) {
+        const erro = await res.json().catch(() => ({}));
+        setEditMsg(erro.detail || "Falha ao salvar.");
+        return;
+      }
+      setOpenEditar(false);
+      qc.invalidateQueries({ queryKey: ["agenda-v2"] });
+      qc.invalidateQueries({ queryKey: ["aluno-ficha"] });
+    } catch (e: any) {
+      setEditMsg(e?.name === "AbortError" ? "Tempo esgotado ao salvar. Tente novamente." : "Falha de rede ao salvar. Tente novamente.");
+    } finally {
+      window.clearTimeout(to);
+      setEditLoading(false);
+    }
   }
 
   function toggleDia(dia: string) {
@@ -302,6 +371,13 @@ export default function AgendaPage() {
             <div className="flex shrink-0 items-center gap-2">
               <div className="hidden items-center gap-1 sm:flex">
                 <button
+                  title="Alterar aula"
+                  onClick={() => abrirEditar(a)}
+                  className="rounded-xl border border-border p-2 text-text hover:bg-bg"
+                >
+                  <Pencil size={16} />
+                </button>
+                <button
                   title="Marcar como realizada"
                   onClick={() => marcarStatus(a, "realizada")}
                   className="rounded-xl border border-border p-2 text-success hover:bg-success/10"
@@ -356,6 +432,29 @@ export default function AgendaPage() {
           <Input placeholder="Motivo (opcional)" value={bloqMotivo} onChange={(e) => setBloqMotivo(e.target.value)} />
           <Button className="h-11 w-full" onClick={salvarBloqueio}>
             <CalendarDays size={14} className="mr-2" /> Salvar bloqueio
+          </Button>
+        </div>
+      </Modal>
+
+      <Modal open={openEditar} onClose={() => setOpenEditar(false)} title="Alterar aula">
+        <div className="space-y-3">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted">Professor</p>
+          <select value={aulaEditProfessorId} onChange={(e) => setAulaEditProfessorId(e.target.value)} className="h-12 w-full rounded-2xl border border-border bg-white px-4 text-text outline-none">
+            <option value="">Selecione o professor</option>
+            {professores.map((p) => (
+              <option key={p.id} value={p.id}>{p.nome}</option>
+            ))}
+          </select>
+          <p className="text-xs font-medium uppercase tracking-wide text-muted">Data</p>
+          <Input type="date" value={aulaEditData} onChange={(e) => setAulaEditData(e.target.value)} />
+          <p className="text-xs font-medium uppercase tracking-wide text-muted">Horario</p>
+          <select value={aulaEditHora} onChange={(e) => setAulaEditHora(e.target.value)} className="h-12 w-full rounded-2xl border border-border bg-white px-4 text-text outline-none">
+            <option value="">Selecione</option>
+            {horas.map((h) => <option key={h} value={h}>{h}</option>)}
+          </select>
+          {editMsg && <p className="text-sm text-danger">{editMsg}</p>}
+          <Button className="h-11 w-full" onClick={salvarEditar} disabled={editLoading}>
+            {editLoading ? "Salvando..." : "Salvar alteracoes"}
           </Button>
         </div>
       </Modal>
