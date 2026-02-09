@@ -1,4 +1,5 @@
 from datetime import date, datetime, timedelta
+import calendar
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import select, func
@@ -20,6 +21,8 @@ def brl(v: float) -> str:
 async def home_kpis(user: Usuario = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     hoje = date.today()
     agora = datetime.utcnow()
+    inicio_mes = hoje.replace(day=1)
+    fim_mes = hoje.replace(day=calendar.monthrange(hoje.year, hoje.month)[1])
 
     # Resolve domain ids (if any)
     aluno = await db.scalar(select(Aluno).where(Aluno.usuario_id == user.id))
@@ -32,6 +35,17 @@ async def home_kpis(user: Usuario = Depends(get_current_user), db: AsyncSession 
         receita_hoje = float(
             (await db.scalar(select(func.sum(ContaReceber.valor)).where(ContaReceber.data_pagamento == hoje))) or 0
         )
+        recebido_mes = float(
+            (
+                await db.scalar(
+                    select(func.sum(ContaReceber.valor)).where(
+                        ContaReceber.data_pagamento >= inicio_mes,
+                        ContaReceber.data_pagamento <= fim_mes,
+                    )
+                )
+            )
+            or 0
+        )
         a_receber = float(
             (await db.scalar(select(func.sum(ContaReceber.valor)).where(ContaReceber.status == "aberto"))) or 0
         )
@@ -43,6 +57,7 @@ async def home_kpis(user: Usuario = Depends(get_current_user), db: AsyncSession 
             "kpis": [
                 {"label": "Aulas Hoje", "value": str(aulas_hoje)},
                 {"label": "Receita Hoje", "value": brl(receita_hoje)},
+                {"label": "Recebido (Mes)", "value": brl(recebido_mes)},
                 {"label": "A Receber", "value": brl(a_receber)},
                 {"label": "Alunos Ativos", "value": str(alunos_ativos)},
             ],
@@ -106,4 +121,3 @@ async def home_kpis(user: Usuario = Depends(get_current_user), db: AsyncSession 
             {"label": "Pendencias", "value": brl(pendencias)},
         ],
     }
-
