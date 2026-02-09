@@ -24,6 +24,7 @@ export default function UsuariosPage() {
   const token = useAuthStore((s) => s.token);
 
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
+  const [filtroStatus, setFiltroStatus] = useState<"ativos" | "inativos" | "todos">("ativos");
   const [nome, setNome] = useState("");
   const [login, setLogin] = useState("");
   const [senha, setSenha] = useState("");
@@ -157,7 +158,24 @@ export default function UsuariosPage() {
 
       <Section title="Lista" subtitle="Usuarios cadastrados">
         <div className="space-y-2">
-          {usuarios.map((u) => (
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="space-y-1">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted">Status</p>
+              <select
+                value={filtroStatus}
+                onChange={(e) => setFiltroStatus(e.target.value as typeof filtroStatus)}
+                className="h-11 rounded-2xl border border-border bg-white px-4 text-text outline-none"
+              >
+                <option value="ativos">Ativos</option>
+                <option value="inativos">Inativos</option>
+                <option value="todos">Todos</option>
+              </select>
+            </div>
+          </div>
+
+          {usuarios
+            .filter((u) => (filtroStatus === "todos" ? true : filtroStatus === "ativos" ? u.ativo : !u.ativo))
+            .map((u) => (
             <Card key={u.id} className="p-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
