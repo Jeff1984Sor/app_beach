@@ -92,6 +92,9 @@ export default function AlunoFichaPage() {
   const [reagendarData, setReagendarData] = useState("");
   const [reagendarHora, setReagendarHora] = useState("");
   const [aulasSelecionadas, setAulasSelecionadas] = useState<number[]>([]);
+  const [aulasFiltroStatus, setAulasFiltroStatus] = useState<
+    "todas_exceto_realizada" | "todas" | "agendada" | "realizada" | "falta" | "falta_aviso" | "cancelada"
+  >("todas_exceto_realizada");
   const [financeiroFiltro, setFinanceiroFiltro] = useState<"aberto" | "pago">("aberto");
   const [openPagar, setOpenPagar] = useState(false);
   const [contaSelecionadaPagar, setContaSelecionadaPagar] = useState<number | null>(null);
@@ -216,6 +219,13 @@ export default function AlunoFichaPage() {
     () => (data?.financeiro || []).filter((x: any) => (financeiroFiltro ? String(x.status || "").toLowerCase() === financeiroFiltro : true)),
     [data, financeiroFiltro]
   );
+  const aulasFiltradas = useMemo(() => {
+    const aulas = (data?.aulas || []) as any[];
+    const norm = (s: any) => String(s || "").toLowerCase();
+    if (aulasFiltroStatus === "todas") return aulas;
+    if (aulasFiltroStatus === "todas_exceto_realizada") return aulas.filter((a) => norm(a.status) !== "realizada");
+    return aulas.filter((a) => norm(a.status) === aulasFiltroStatus);
+  }, [data, aulasFiltroStatus]);
 
   function abrirEdicao() {
     if (!data) return;
@@ -385,7 +395,7 @@ export default function AlunoFichaPage() {
   }
 
   function selecionarTodasAulas() {
-    const selecionaveis = (data?.aulas || [])
+    const selecionaveis = aulasFiltradas
       .filter((a: any) => String(a.status || "").toLowerCase() !== "realizada")
       .map((a: any) => a.id as number);
     if (aulasSelecionadas.length === selecionaveis.length) {
@@ -559,6 +569,20 @@ export default function AlunoFichaPage() {
           {tab === "Aulas" && (
             <Section title="Aulas">
               <div className="mb-3 flex flex-wrap gap-2">
+                <select
+                  value={aulasFiltroStatus}
+                  onChange={(e) => setAulasFiltroStatus(e.target.value as any)}
+                  className="h-10 rounded-xl border border-border bg-white px-3 text-sm text-text outline-none"
+                  aria-label="Filtrar status"
+                >
+                  <option value="todas_exceto_realizada">Status: Todas (exceto Realizada)</option>
+                  <option value="todas">Status: Todas (inclui Realizada)</option>
+                  <option value="agendada">Status: Agendada</option>
+                  <option value="realizada">Status: Realizada</option>
+                  <option value="falta_aviso">Status: Falta avisada</option>
+                  <option value="falta">Status: Falta</option>
+                  <option value="cancelada">Status: Cancelada</option>
+                </select>
                 <button onClick={selecionarTodasAulas} className="rounded-xl border border-border px-3 py-2 text-sm text-text hover:bg-bg">
                   {aulasSelecionadas.length > 0 ? "Desmarcar todas" : "Selecionar todas"}
                 </button>
@@ -571,7 +595,7 @@ export default function AlunoFichaPage() {
                 </button>
               </div>
               <div className="space-y-3">
-                {data.aulas.map((a: any) => (
+                {aulasFiltradas.map((a: any) => (
                   <Card key={a.id} className="space-y-3 p-4">
                     <div className="flex items-center justify-between gap-3">
                       <div className="flex items-center gap-3">
