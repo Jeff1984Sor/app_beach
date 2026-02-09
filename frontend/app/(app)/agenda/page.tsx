@@ -82,7 +82,11 @@ function formatDateTimeBR(iso: string): { data: string; hora: string } {
 }
 
 function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
+  const d = new Date();
+  const yy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yy}-${mm}-${dd}`;
 }
 
 function statusMeta(statusRaw: string) {
@@ -98,12 +102,12 @@ export default function AgendaPage() {
   const qc = useQueryClient();
   const token = useAuthStore((s) => s.token);
   const [modo, setModo] = useState<"dia" | "semana" | "mes">("dia");
-  const [dataRef, setDataRef] = useState(new Date().toISOString().slice(0, 10));
+  const [dataRef, setDataRef] = useState(todayIso());
   const [professorId, setProfessorId] = useState<string>("todos");
   const [busca, setBusca] = useState("");
   const [openBloqueio, setOpenBloqueio] = useState(false);
-  const [bloqInicio, setBloqInicio] = useState(new Date().toISOString().slice(0, 10));
-  const [bloqFim, setBloqFim] = useState(new Date().toISOString().slice(0, 10));
+  const [bloqInicio, setBloqInicio] = useState(todayIso());
+  const [bloqFim, setBloqFim] = useState(todayIso());
   const [bloqHoraInicio, setBloqHoraInicio] = useState("18:00");
   const [bloqHoraFim, setBloqHoraFim] = useState("19:00");
   const [bloqMotivo, setBloqMotivo] = useState("");
@@ -287,6 +291,15 @@ export default function AgendaPage() {
     qc.invalidateQueries({ queryKey: ["agenda-v2"] });
   }
 
+  function abrirModalBloqueio() {
+    // Default the range to the currently selected date to avoid accidental multi-day blocks.
+    setBloqInicio(dataRef);
+    setBloqFim(dataRef);
+    setBloqMotivo("");
+    setBloqDias([]);
+    setOpenBloqueio(true);
+  }
+
   return (
     <main className="space-y-4">
       <Section title="Agenda" subtitle="Dia, semana e mes por professor">
@@ -335,7 +348,7 @@ export default function AgendaPage() {
           </select>
 
           <div className="lg:col-span-2">
-            <Button className="h-12 w-full min-w-[120px] justify-center gap-2 px-4 whitespace-nowrap" onClick={() => setOpenBloqueio(true)}>
+            <Button className="h-12 w-full min-w-[120px] justify-center gap-2 px-4 whitespace-nowrap" onClick={abrirModalBloqueio}>
               <Lock size={16} /> Bloquear
             </Button>
           </div>
