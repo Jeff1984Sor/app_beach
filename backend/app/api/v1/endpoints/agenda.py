@@ -58,7 +58,7 @@ async def listar_professores(db: AsyncSession = Depends(get_db)):
             SELECT u.id, 0, NOW(), NOW()
             FROM usuarios u
             WHERE u.ativo = TRUE
-              AND u.role IN ('gestor', 'professor')
+              AND u.role <> 'aluno'
               AND NOT EXISTS (SELECT 1 FROM profissionais p WHERE p.usuario_id = u.id)
             """
         )
@@ -69,7 +69,7 @@ async def listar_professores(db: AsyncSession = Depends(get_db)):
             select(Profissional.id, Profissional.usuario_id, Usuario.nome)
             .join(Usuario, Usuario.id == Profissional.usuario_id)
             .where(Usuario.ativo == True)
-            .where(Usuario.role.in_(["gestor", "professor"]))
+            .where(Usuario.role != "aluno")
             .order_by(Usuario.nome.asc())
         )
     ).all()
