@@ -51,6 +51,7 @@ async function fetchFicha(id: string) {
 
 const tabs = ["Aulas", "Financeiro", "Contratos", "WhatsApp"];
 type PlanoOption = { nome: string; valor: number; recorrencia: string; aulasSemanais: number };
+type AgendaSemanaItem = { dia: string; hora: string };
 const horasCheias = Array.from({ length: 15 }, (_, i) => `${String(i + 7).padStart(2, "0")}:00`);
 
 function aulaStatusMeta(statusRaw: string) {
@@ -81,9 +82,8 @@ export default function AlunoFichaPage() {
   const [valor, setValor] = useState("");
   const [qtdAulas, setQtdAulas] = useState("");
   const [dataInicio, setDataInicio] = useState("");
-  const [diasSemana, setDiasSemana] = useState<string[]>([]);
   const [dataFimPreview, setDataFimPreview] = useState("");
-  const [horaAula, setHoraAula] = useState("");
+  const [agendaSemana, setAgendaSemana] = useState<AgendaSemanaItem[]>([]);
   const [contratoProfessorId, setContratoProfessorId] = useState("");
   const [editingContratoId, setEditingContratoId] = useState<number | null>(null);
   const [msgContrato, setMsgContrato] = useState<string>("");
@@ -208,6 +208,20 @@ export default function AlunoFichaPage() {
   }, [dataInicio, recorrencia]);
 
   useEffect(() => {
+    if (!openContrato) return;
+    const qtd = Number(qtdAulas || 0);
+    if (!qtd) {
+      setAgendaSemana([]);
+      return;
+    }
+    setAgendaSemana((prev) => {
+      const next = prev.slice(0, qtd);
+      while (next.length < qtd) next.push({ dia: "", hora: "" });
+      return next;
+    });
+  }, [qtdAulas, openContrato]);
+
+  useEffect(() => {
     if (!planos.length || !planoNome) return;
     const selected = planos.find((p) => p.nome === planoNome);
     if (!selected) return;
@@ -266,20 +280,24 @@ export default function AlunoFichaPage() {
     qc.invalidateQueries({ queryKey: ["alunos-lista"] });
   }
 
-  function toggleDia(dia: string) {
-    setDiasSemana((prev) => {
-      if (prev.includes(dia)) return prev.filter((d) => d !== dia);
-      const limite = Number(qtdAulas || 0);
-      if (limite <= 0) {
-        setMsgContrato("Selecione um plano antes de escolher os dias.");
-        return prev;
-      }
-      if (prev.length >= limite) {
-        setMsgContrato(`Este plano permite no maximo ${limite} dia(s) por semana.`);
+  function atualizarAgendaDia(index: number, dia: string) {
+    setAgendaSemana((prev) => {
+      const diaFinal = String(dia || "").trim();
+      if (diaFinal && prev.some((it, i) => i !== index && it.dia === diaFinal)) {
+        setMsgContrato("Este dia da semana ja foi selecionado em outra aula.");
         return prev;
       }
       setMsgContrato("");
-      return [...prev, dia];
+      const next = prev.map((it, i) => (i === index ? { ...it, dia: diaFinal } : it));
+      return next;
+    });
+  }
+
+  function atualizarAgendaHora(index: number, hora: string) {
+    setAgendaSemana((prev) => {
+      const horaFinal = String(hora || "").trim();
+      const next = prev.map((it, i) => (i === index ? { ...it, hora: horaFinal } : it));
+      return next;
     });
   }
 
@@ -302,14 +320,28 @@ export default function AlunoFichaPage() {
       setMsgContrato("Informe a data de inicio do contrato.");
       return;
     }
-    if (!horaAula) {
-      setMsgContrato("Selecione o horario.");
-      return;
-    }
     if (!contratoProfessorId) {
       setMsgContrato("Selecione o professor do contrato.");
       return;
     }
+    const qtd = Number(qtdAulas || 0);
+    if (!qtd) {
+      setMsgContrato("Plano invalido. Verifique a quantidade de aulas por semana.");
+      return;
+    }
+    const agenda = agendaSemana
+      .map((it) => ({ dia: String(it.dia || "").trim(), hora: String(it.hora || "").trim() }))
+      .filter((it) => it.dia && it.hora);
+    if (agenda.length !== qtd) {
+      setMsgContrato(`Preencha o dia e a hora das ${qtd} aula(s) da semana.`);
+      return;
+    }
+    const uniq = new Set(agenda.map((a) => a.dia));
+    if (uniq.size !== agenda.length) {
+      setMsgContrato("Nao e possivel selecionar o mesmo dia da semana em mais de uma aula.");
+      return;
+    }
+    const dias = agenda.map((a) => a.dia);
     setMsgContrato("");
     const url = editingContratoId
       ? `${API_URL}/alunos/${data.id}/contratos/${editingContratoId}`
@@ -324,7 +356,8 @@ export default function AlunoFichaPage() {
         valor: Number(valor || 0),
         qtd_aulas_semanais: Number(qtdAulas || 0),
         data_inicio: dataInicio,
-        dias_semana: diasSemana,
+        dias_semana: dias,
+        agenda_semana: agenda,
         professor_id: Number(contratoProfessorId),
       }),
     });
@@ -336,8 +369,8 @@ export default function AlunoFichaPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          dias_semana: diasSemana,
-          hora_inicio: horaAula,
+          dias_semana: dias,
+          agenda_semana: agenda,
           duracao_minutos: 60,
           unidade: data.unidade,
           professor_id: Number(contratoProfessorId),
@@ -492,7 +525,13 @@ export default function AlunoFichaPage() {
     setEditingContratoId(c.id);
     selecionarPlano(c.plano);
     setDataInicio(c.inicio_iso || new Date().toISOString().slice(0, 10));
-    setDiasSemana(c.dias_semana?.length ? c.dias_semana : []);
+    const agendaRaw = Array.isArray(c.agenda_semana) ? c.agenda_semana : [];
+    if (agendaRaw.length) {
+      setAgendaSemana(agendaRaw.map((it: any) => ({ dia: String(it.dia || ""), hora: String(it.hora || "") })));
+    } else {
+      const dias = Array.isArray(c.dias_semana) ? c.dias_semana : [];
+      setAgendaSemana(dias.map((d: any) => ({ dia: String(d || ""), hora: "" })));
+    }
     setContratoProfessorId(c.professor_id ? String(c.professor_id) : "");
     setOpenContrato(true);
   }
@@ -775,8 +814,7 @@ export default function AlunoFichaPage() {
                     setRecorrencia("");
                     setQtdAulas("");
                     setDataInicio("");
-                    setHoraAula("");
-                    setDiasSemana([]);
+                    setAgendaSemana([]);
                     setContratoProfessorId("");
                     setMsgContrato("");
                     setOpenContrato(true);
@@ -886,15 +924,7 @@ export default function AlunoFichaPage() {
               <p className="text-xs font-medium uppercase tracking-wide text-muted">Numero de aulas por semana</p>
               <Input value={qtdAulas} readOnly />
             </div>
-            <div className="space-y-1">
-              <p className="text-xs font-medium uppercase tracking-wide text-muted">Horario</p>
-              <select value={horaAula} onChange={(e) => setHoraAula(e.target.value)} className="h-12 w-full rounded-2xl border border-border bg-white px-4 text-text outline-none">
-                <option value="">Selecione o horario</option>
-                {horasCheias.map((h) => (
-                  <option key={h} value={h}>{h}</option>
-                ))}
-              </select>
-            </div>
+            <div className="hidden sm:block" />
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2">
@@ -909,15 +939,46 @@ export default function AlunoFichaPage() {
           </div>
 
           <div className="space-y-2">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted">Dias da semana</p>
-            <div className="flex flex-wrap gap-2">
-              {["Seg", "Ter", "Qua", "Qui", "Sex", "Sab", "Dom"].map((d) => (
-                <button key={d} onClick={() => toggleDia(d)} className={`rounded-xl px-3 py-2 text-sm ${diasSemana.includes(d) ? "bg-primary text-white" : "border border-border bg-white text-text"}`}>
-                  {d}
-                </button>
-              ))}
-            </div>
-            <p className="text-xs text-muted">Selecionados: {diasSemana.length}/{qtdAulas}</p>
+            <p className="text-xs font-medium uppercase tracking-wide text-muted">Agenda semanal</p>
+            {Number(qtdAulas || 0) <= 0 ? (
+              <p className="text-xs text-muted">Selecione um plano para configurar os dias e horarios.</p>
+            ) : (
+              <div className="space-y-3">
+                {agendaSemana.map((item, idx) => (
+                  <Card key={`agenda-${idx}`} className="space-y-2 p-3">
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted">Aula {idx + 1}</p>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <select
+                        value={item.dia}
+                        onChange={(e) => atualizarAgendaDia(idx, e.target.value)}
+                        className="h-12 w-full rounded-2xl border border-border bg-white px-4 text-text outline-none"
+                      >
+                        <option value="">Dia da semana</option>
+                        {["Seg", "Ter", "Qua", "Qui", "Sex", "Sab", "Dom"].map((d) => (
+                          <option key={d} value={d} disabled={agendaSemana.some((it, i) => i !== idx && it.dia === d)}>
+                            {d}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        value={item.hora}
+                        onChange={(e) => atualizarAgendaHora(idx, e.target.value)}
+                        className="h-12 w-full rounded-2xl border border-border bg-white px-4 text-text outline-none"
+                        disabled={!item.dia}
+                      >
+                        <option value="">Hora</option>
+                        {horasCheias.map((h) => (
+                          <option key={h} value={h}>
+                            {h}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            )}
+            <p className="text-xs text-muted">Preencha {qtdAulas || 0} aula(s) por semana.</p>
           </div>
 
           {msgContrato && <p className="text-sm text-danger">{msgContrato}</p>}

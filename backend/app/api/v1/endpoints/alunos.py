@@ -1,6 +1,7 @@
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 import calendar
+import json
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, text
@@ -64,6 +65,7 @@ async def ensure_contracts_table(db: AsyncSession):
       data_inicio DATE NOT NULL,
       data_fim DATE NOT NULL,
       dias_semana VARCHAR(120),
+      agenda_semana TEXT,
       status VARCHAR(20) DEFAULT 'ativo'
     )
     """))
@@ -77,6 +79,13 @@ async def ensure_contracts_table(db: AsyncSession):
                 WHERE table_name = 'aluno_contratos' AND column_name = 'professor_id'
               ) THEN
                 ALTER TABLE aluno_contratos ADD COLUMN professor_id INTEGER;
+              END IF;
+
+              IF NOT EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'aluno_contratos' AND column_name = 'agenda_semana'
+              ) THEN
+                ALTER TABLE aluno_contratos ADD COLUMN agenda_semana TEXT;
               END IF;
             END $$;
             """
@@ -325,6 +334,58 @@ def dia_label_to_weekday(dia: str) -> int | None:
     return mapa.get((dia or "").strip().lower()[:3])
 
 
+def normalize_dia_label(dia: str) -> str | None:
+    key = (dia or "").strip().lower()[:3]
+    mapa = {"seg": "Seg", "ter": "Ter", "qua": "Qua", "qui": "Qui", "sex": "Sex", "sab": "Sab", "dom": "Dom"}
+    return mapa.get(key)
+
+
+def normalize_agenda_semana(raw) -> list[dict]:
+    """
+    Normaliza agenda semanal:
+    - Entrada esperada: [{"dia": "Seg", "hora": "07:00"}, ...]
+    - Retorna: lista normalizada com labels padrao (Seg/Ter/...) e hora HH:MM.
+    """
+    if not raw:
+        return []
+    if not isinstance(raw, list):
+        raise HTTPException(status_code=400, detail="agenda_semana deve ser uma lista")
+    out: list[dict] = []
+    used: set[str] = set()
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        dia = normalize_dia_label(item.get("dia")) if isinstance(item.get("dia"), str) else None
+        hora = item.get("hora") if isinstance(item.get("hora"), str) else None
+        hora = (hora or "").strip()
+        if not dia or not hora:
+            continue
+        # valida HH:MM
+        try:
+            hh, mm = hora.split(":")
+            hhi = int(hh)
+            mmi = int(mm)
+            if hhi < 0 or hhi > 23 or mmi < 0 or mmi > 59:
+                raise ValueError("hora invalida")
+        except Exception:
+            raise HTTPException(status_code=400, detail="Hora invalida, use HH:MM")
+        if dia in used:
+            raise HTTPException(status_code=400, detail="Dia da semana repetido na agenda")
+        used.add(dia)
+        out.append({"dia": dia, "hora": f"{hhi:02d}:{mmi:02d}"})
+    return out
+
+
+def safe_json_loads(raw) -> list:
+    if not raw or not isinstance(raw, str):
+        return []
+    try:
+        val = json.loads(raw)
+        return val if isinstance(val, list) else []
+    except Exception:
+        return []
+
+
 async def get_details(db: AsyncSession, aluno_id: int) -> dict:
     row = (
         await db.execute(
@@ -405,6 +466,7 @@ async def ficha_aluno(aluno_id: int, db: AsyncSession = Depends(get_db)):
             text(
                 """
                 SELECT c.id, c.plano_nome, c.data_inicio, c.data_fim, c.status, c.recorrencia, c.valor, c.qtd_aulas_semanais, c.dias_semana,
+                       c.agenda_semana,
                        c.professor_id,
                        COALESCE(u.nome, '') AS professor_nome
                 FROM aluno_contratos
@@ -434,8 +496,8 @@ async def ficha_aluno(aluno_id: int, db: AsyncSession = Depends(get_db)):
         "aulas": [
             {
                 "id": a[0],
-                "data": a[1].strftime("%d/%m/%Y") if a[1] else "--",
-                "hora": a[1].strftime("%H:%M") if a[1] else "--",
+                "data": (a[1].astimezone(BR_TZ).strftime("%d/%m/%Y") if getattr(a[1], "tzinfo", None) else a[1].replace(tzinfo=timezone.utc).astimezone(BR_TZ).strftime("%d/%m/%Y")) if a[1] else "--",
+                "hora": (a[1].astimezone(BR_TZ).strftime("%H:%M") if getattr(a[1], "tzinfo", None) else a[1].replace(tzinfo=timezone.utc).astimezone(BR_TZ).strftime("%H:%M")) if a[1] else "--",
                 "unidade": d.get("unidade") or "Nao definida",
                 "status": a[2],
                 "professor_id": a[3],
@@ -465,8 +527,9 @@ async def ficha_aluno(aluno_id: int, db: AsyncSession = Depends(get_db)):
                 "qtd_aulas_semanais": int(c[7] or 0),
                 "dias_semana": [d for d in (c[8] or "").split(",") if d],
                 "inicio_iso": c[2].strftime("%Y-%m-%d") if c[2] else None,
-                "professor_id": c[9],
-                "professor_nome": c[10] or "",
+                "agenda_semana": safe_json_loads(c[9]),
+                "professor_id": c[10],
+                "professor_nome": c[11] or "",
             }
             for c in contratos_rows
         ],
@@ -555,10 +618,12 @@ async def criar_contrato(aluno_id: int, payload: dict, db: AsyncSession = Depend
     recorrencia = (payload.get("recorrencia") or "mensal").lower()
     valor = float(payload.get("valor") or 0)
     qtd_aulas_semanais = int(payload.get("qtd_aulas_semanais") or 0)
-    dias_lista = payload.get("dias_semana") or []
+    agenda_semana_norm = normalize_agenda_semana(payload.get("agenda_semana"))
+    dias_lista = [a["dia"] for a in agenda_semana_norm] if agenda_semana_norm else (payload.get("dias_semana") or [])
     if qtd_aulas_semanais > 0 and len(dias_lista) > qtd_aulas_semanais:
         raise HTTPException(status_code=400, detail=f"Plano permite no maximo {qtd_aulas_semanais} dia(s) por semana")
     dias_semana = ",".join(dias_lista)
+    agenda_semana_json = json.dumps(agenda_semana_norm, ensure_ascii=False) if agenda_semana_norm else None
 
     data_inicio_raw = payload.get("data_inicio")
     data_inicio = datetime.strptime(data_inicio_raw, "%Y-%m-%d").date() if data_inicio_raw else date.today()
@@ -568,8 +633,8 @@ async def criar_contrato(aluno_id: int, payload: dict, db: AsyncSession = Depend
     contrato_row = (
         await db.execute(
             text("""
-            INSERT INTO aluno_contratos (aluno_id, professor_id, plano_nome, recorrencia, valor, qtd_aulas_semanais, data_inicio, data_fim, dias_semana, status)
-            VALUES (:aluno_id, :professor_id, :plano_nome, :recorrencia, :valor, :qtd_aulas_semanais, :data_inicio, :data_fim, :dias_semana, 'ativo')
+            INSERT INTO aluno_contratos (aluno_id, professor_id, plano_nome, recorrencia, valor, qtd_aulas_semanais, data_inicio, data_fim, dias_semana, agenda_semana, status)
+            VALUES (:aluno_id, :professor_id, :plano_nome, :recorrencia, :valor, :qtd_aulas_semanais, :data_inicio, :data_fim, :dias_semana, :agenda_semana, 'ativo')
             RETURNING id
             """),
             {
@@ -582,6 +647,7 @@ async def criar_contrato(aluno_id: int, payload: dict, db: AsyncSession = Depend
                 "data_inicio": data_inicio,
                 "data_fim": data_fim,
                 "dias_semana": dias_semana,
+                "agenda_semana": agenda_semana_json,
             },
         )
     ).first()
@@ -622,10 +688,12 @@ async def atualizar_contrato(aluno_id: int, contrato_id: int, payload: dict, db:
     recorrencia = (payload.get("recorrencia") or "mensal").lower()
     valor = float(payload.get("valor") or 0)
     qtd_aulas_semanais = int(payload.get("qtd_aulas_semanais") or 0)
-    dias_lista = payload.get("dias_semana") or []
+    agenda_semana_norm = normalize_agenda_semana(payload.get("agenda_semana"))
+    dias_lista = [a["dia"] for a in agenda_semana_norm] if agenda_semana_norm else (payload.get("dias_semana") or [])
     if qtd_aulas_semanais > 0 and len(dias_lista) > qtd_aulas_semanais:
         raise HTTPException(status_code=400, detail=f"Plano permite no maximo {qtd_aulas_semanais} dia(s) por semana")
     dias_semana = ",".join(dias_lista)
+    agenda_semana_json = json.dumps(agenda_semana_norm, ensure_ascii=False) if agenda_semana_norm else None
     data_inicio_raw = payload.get("data_inicio")
     data_inicio = datetime.strptime(data_inicio_raw, "%Y-%m-%d").date() if data_inicio_raw else date.today()
     data_fim = add_months(data_inicio, recorrencia_to_meses(recorrencia))
@@ -641,7 +709,8 @@ async def atualizar_contrato(aluno_id: int, contrato_id: int, payload: dict, db:
                 qtd_aulas_semanais = :qtd_aulas_semanais,
                 data_inicio = :data_inicio,
                 data_fim = :data_fim,
-                dias_semana = :dias_semana
+                dias_semana = :dias_semana,
+                agenda_semana = :agenda_semana
             WHERE id = :contrato_id AND aluno_id = :aluno_id
             """
         ),
@@ -654,6 +723,7 @@ async def atualizar_contrato(aluno_id: int, contrato_id: int, payload: dict, db:
             "data_inicio": data_inicio,
             "data_fim": data_fim,
             "dias_semana": dias_semana,
+            "agenda_semana": agenda_semana_json,
             "contrato_id": contrato_id,
             "aluno_id": aluno_id,
         },
@@ -698,13 +768,14 @@ async def deletar_contrato(aluno_id: int, contrato_id: int, db: AsyncSession = D
 
 @router.post("/{aluno_id}/contratos/{contrato_id}/reservas")
 async def criar_reservas_contrato(aluno_id: int, contrato_id: int, payload: dict, db: AsyncSession = Depends(get_db)):
+    await ensure_contracts_table(db)
     await ensure_contract_links(db)
     await ensure_bloqueios_table(db)
     contrato = (
         await db.execute(
             text(
                 """
-                SELECT id, data_inicio, data_fim, valor, dias_semana, professor_id
+                SELECT id, data_inicio, data_fim, valor, dias_semana, agenda_semana, professor_id, qtd_aulas_semanais
                 FROM aluno_contratos
                 WHERE id = :contrato_id AND aluno_id = :aluno_id
                 """
@@ -720,15 +791,41 @@ async def criar_reservas_contrato(aluno_id: int, contrato_id: int, payload: dict
         raise HTTPException(status_code=404, detail="Aluno nao encontrado")
 
     unidade_nome = payload.get("unidade")
-    hora_inicio_txt = payload.get("hora_inicio") or "18:00"
     duracao_min = int(payload.get("duracao_minutos") or 60)
-    dias = payload.get("dias_semana") or []
-    if not dias:
-        dias = [d for d in (contrato[4] or "").split(",") if d]
-    weekdays = [dia_label_to_weekday(d) for d in dias]
-    weekdays = [d for d in weekdays if d is not None]
-    if not weekdays:
-        raise HTTPException(status_code=400, detail="Selecione ao menos um dia da semana")
+
+    agenda_semana_norm = normalize_agenda_semana(payload.get("agenda_semana"))
+    if not agenda_semana_norm:
+        # tenta ler do contrato salvo
+        agenda_semana_norm = normalize_agenda_semana(safe_json_loads(contrato[5]))
+    if not agenda_semana_norm:
+        hora_inicio_txt = payload.get("hora_inicio") or "18:00"
+        dias = payload.get("dias_semana") or []
+        if not dias:
+            dias = [d for d in (contrato[4] or "").split(",") if d]
+        used: set[str] = set()
+        for d in dias:
+            dia_norm = normalize_dia_label(d)
+            if not dia_norm or dia_norm in used:
+                continue
+            used.add(dia_norm)
+            agenda_semana_norm.append({"dia": dia_norm, "hora": hora_inicio_txt})
+
+    if not agenda_semana_norm:
+        raise HTTPException(status_code=400, detail="Selecione ao menos um dia da semana e o horario")
+
+    limite_semana = int(contrato[7] or 0)
+    if limite_semana > 0 and len(agenda_semana_norm) > limite_semana:
+        raise HTTPException(status_code=400, detail=f"Plano permite no maximo {limite_semana} dia(s) por semana")
+
+    agenda_por_weekday: dict[int, list[str]] = {}
+    for it in agenda_semana_norm:
+        wd = dia_label_to_weekday(it.get("dia"))
+        if wd is None:
+            continue
+        agenda_por_weekday.setdefault(wd, []).append(it.get("hora"))
+
+    if not agenda_por_weekday:
+        raise HTTPException(status_code=400, detail="Dias da semana invalidos")
 
     unidade = await db.scalar(select(Unidade).where(Unidade.nome == unidade_nome)) if unidade_nome else None
     if not unidade:
@@ -738,7 +835,7 @@ async def criar_reservas_contrato(aluno_id: int, contrato_id: int, payload: dict
         db.add(unidade)
         await db.flush()
 
-    professor_id = payload.get("professor_id") or contrato[5]
+    professor_id = payload.get("professor_id") or contrato[6]
     prof = None
     if professor_id:
         try:
@@ -758,27 +855,29 @@ async def criar_reservas_contrato(aluno_id: int, contrato_id: int, payload: dict
 
     conflitos: list[str] = []
     while data_cursor <= fim_periodo:
-        if data_cursor.weekday() in weekdays:
+        horas_dia = agenda_por_weekday.get(data_cursor.weekday()) or []
+        if horas_dia:
             agenda = await db.scalar(select(Agenda).where(Agenda.unidade_id == unidade.id, Agenda.data == data_cursor))
             if not agenda:
                 agenda = Agenda(unidade_id=unidade.id, data=data_cursor)
                 db.add(agenda)
                 await db.flush()
 
-            inicio_dt = br_local_to_utc(data_cursor, hora_inicio_txt)
-            fim_dt = inicio_dt + timedelta(minutes=duracao_min)
-            existe = await db.scalar(
-                select(Aula).where(
-                    Aula.agenda_id == agenda.id,
-                    Aula.aluno_id == aluno_id,
-                    Aula.inicio == inicio_dt,
+            for hora_txt in horas_dia:
+                inicio_dt = br_local_to_utc(data_cursor, hora_txt)
+                fim_dt = inicio_dt + timedelta(minutes=duracao_min)
+                existe = await db.scalar(
+                    select(Aula).where(
+                        Aula.agenda_id == agenda.id,
+                        Aula.aluno_id == aluno_id,
+                        Aula.inicio == inicio_dt,
+                    )
                 )
-            )
-            if not existe:
+                if existe:
+                    continue
                 conflito = await slot_em_conflito(db, prof.id, inicio_dt, fim_dt, unidade_id=unidade.id)
                 if conflito:
-                    conflitos.append(f"{data_cursor.strftime('%d/%m/%Y')} {hora_inicio_txt} - {conflito}")
-                    data_cursor += timedelta(days=1)
+                    conflitos.append(f"{data_cursor.strftime('%d/%m/%Y')} {hora_txt} - {conflito}")
                     continue
                 db.add(
                     Aula(
@@ -794,6 +893,13 @@ async def criar_reservas_contrato(aluno_id: int, contrato_id: int, payload: dict
                 )
                 aulas_criadas += 1
         data_cursor += timedelta(days=1)
+
+    # Persiste configuracao de agenda no contrato
+    dias_txt = ",".join([a.get("dia") for a in agenda_semana_norm if a.get("dia")])
+    await db.execute(
+        text("UPDATE aluno_contratos SET dias_semana = :d, agenda_semana = :a WHERE id = :cid AND aluno_id = :aluno_id"),
+        {"d": dias_txt, "a": json.dumps(agenda_semana_norm, ensure_ascii=False), "cid": contrato_id, "aluno_id": aluno_id},
+    )
 
     await db.commit()
     return {"ok": True, "aulas_criadas": aulas_criadas, "conflitos": conflitos}
