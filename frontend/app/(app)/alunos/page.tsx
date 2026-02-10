@@ -99,7 +99,7 @@ export default function AlunosPage() {
         </div>
       </Section>
 
-      <section className="space-y-4">
+      <section className="space-y-5">
         {isLoading && Array.from({ length: 4 }).map((_, i) => <Card key={i} className="h-24 animate-pulse bg-white/90" />)}
 
         {!isLoading && filtrados.map((aluno) => (
