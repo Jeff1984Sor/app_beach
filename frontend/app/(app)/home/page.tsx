@@ -203,7 +203,7 @@ export default function HomePage() {
     });
   }, [pendencias]);
 
-  const contasAbertas = contasAbertasPorAluno.slice(0, 6);
+  const contasAbertas = contasAbertasPorAluno;
 
   return (
     <main className="space-y-5">
@@ -312,36 +312,40 @@ export default function HomePage() {
                 Ver financeiro <ArrowRight className="ml-1 inline" size={16} />
               </Link>
             </div>
-            <div className="space-y-2 px-4 pb-4">
+            <div className="px-4 pb-4">
               {pendLoading && <div className="h-24 animate-pulse rounded-2xl bg-bg" />}
               {!pendLoading && contasAbertas.length === 0 && (
                 <div className="rounded-2xl bg-bg p-4 text-sm text-muted">Nenhuma conta em aberto.</div>
               )}
-              {!pendLoading &&
-                contasAbertas.map((c) => (
-                  <div key={c.aluno_id || c.aluno_nome} className="rounded-2xl border border-border bg-white p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="truncate font-semibold text-text">{c.aluno_nome}</p>
-                        <p className="truncate text-sm text-muted">
-                          {c.qtd} em aberto • Próx: {c.proximo_vencimento}
-                        </p>
-                      </div>
-                      <div className="shrink-0 text-right">
-                        <p className="font-semibold text-text">
-                          {Number(c.total || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
-                        </p>
-                        <button
-                          type="button"
-                          onClick={() => abrirPagar(c.proxima_conta)}
-                          className="mt-2 inline-flex h-9 items-center rounded-2xl bg-success px-4 text-sm font-semibold text-white shadow-soft"
-                        >
-                          Pagar próxima
-                        </button>
+
+              {!pendLoading && contasAbertas.length > 0 && (
+                <div className="max-h-[52vh] space-y-2 overflow-y-auto pr-1">
+                  {contasAbertas.map((c) => (
+                    <div key={c.aluno_id || c.aluno_nome} className="rounded-2xl border border-border bg-white p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="truncate font-semibold text-text">{c.aluno_nome}</p>
+                          <p className="truncate text-sm text-muted">
+                            {c.qtd} em aberto • Próx: {c.proximo_vencimento}
+                          </p>
+                        </div>
+                        <div className="shrink-0 text-right">
+                          <p className="font-semibold text-text">
+                            {Number(c.total || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => abrirPagar(c.proxima_conta)}
+                            className="mt-2 inline-flex h-9 items-center rounded-2xl bg-success px-4 text-sm font-semibold text-white shadow-soft"
+                          >
+                            Pagar próxima
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
+              )}
 
               <div className="flex flex-wrap items-center gap-2 pt-2">
                 <Link href="/alunos/novo" className="inline-flex h-11 items-center rounded-2xl bg-primary px-5 text-sm font-semibold text-white shadow-soft">
