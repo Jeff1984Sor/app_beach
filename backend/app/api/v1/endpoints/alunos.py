@@ -1426,10 +1426,24 @@ async def delete_aluno(aluno_id: int, db: AsyncSession = Depends(get_db)):
     row = await db.get(Aluno, aluno_id)
     if not row:
         raise HTTPException(status_code=404, detail="Aluno nao encontrado")
+    usuario_id = row.usuario_id
+
+    # Excluir aluno envolve remover dependencias para nao quebrar FKs.
+    # Obs: isso apaga historico (aulas/financeiro). Se precisar apenas remover da lista,
+    # podemos evoluir para um "inativar" depois.
+    await db.execute(text("DELETE FROM contas_receber WHERE aluno_id = :id"), {"id": aluno_id})
+    await db.execute(text("DELETE FROM aulas WHERE aluno_id = :id"), {"id": aluno_id})
     await db.execute(text("DELETE FROM aluno_detalhes WHERE aluno_id = :id"), {"id": aluno_id})
     await db.execute(text("DELETE FROM aluno_contratos WHERE aluno_id = :id"), {"id": aluno_id})
+
     await db.delete(row)
+
+    if usuario_id:
+        user = await db.get(Usuario, int(usuario_id))
+        if user:
+            await db.delete(user)
+
     await db.commit()
-    return {"ok": True}
+    return {"ok": True, "deleted": True}
 
 

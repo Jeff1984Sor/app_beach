@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { ChevronRight, Plus, Search } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { ChevronRight, Plus, Search, Trash2 } from "lucide-react";
 import { motion } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -27,17 +27,36 @@ async function fetchAlunos(): Promise<AlunoItem[]> {
 }
 
 export default function AlunosPage() {
+  const qc = useQueryClient();
   const { data = [], isLoading } = useQuery({ queryKey: ["alunos-lista"], queryFn: fetchAlunos });
 
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"todos" | "ativo" | "inativo">("todos");
   const [unidadeFilter, setUnidadeFilter] = useState<string>("todas");
+  const [deletingId, setDeletingId] = useState<number | null>(null);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search.trim().toLowerCase()), 300);
     return () => clearTimeout(t);
   }, [search]);
+
+  async function excluirAluno(alunoId: number) {
+    if (!window.confirm("Deseja realmente excluir este aluno? Isso apagara aulas e financeiro vinculados.")) return;
+    setDeletingId(alunoId);
+    try {
+      const res = await fetch(`${API_URL}/alunos/${alunoId}`, { method: "DELETE" });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        window.alert(body?.detail || "Nao foi possivel excluir o aluno.");
+        return;
+      }
+      qc.invalidateQueries({ queryKey: ["alunos-lista"] });
+      window.alert("Aluno excluido com sucesso.");
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   const unidades = useMemo(() => ["todas", ...Array.from(new Set(data.map((x) => x.unidade)))], [data]);
 
@@ -92,7 +111,22 @@ export default function AlunosPage() {
                     <span className="text-xs text-muted">{aluno.unidade}</span>
                   </div>
                 </div>
-                <ChevronRight className="text-muted" size={18} />
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    title="Excluir aluno"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      excluirAluno(aluno.id);
+                    }}
+                    disabled={deletingId === aluno.id}
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-border bg-white text-danger shadow-soft disabled:opacity-60"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                  <ChevronRight className="text-muted" size={18} />
+                </div>
               </Card>
             </motion.div>
           </Link>
