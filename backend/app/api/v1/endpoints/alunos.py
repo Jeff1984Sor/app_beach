@@ -233,17 +233,32 @@ async def slot_em_conflito(
     unidade_id: int | None = None,
     ignore_aula_id: int | None = None,
 ):
-    conflito_aula_q = select(Aula).where(
-        Aula.professor_id == professor_id,
-        Aula.inicio < fim_dt,
-        Aula.fim > inicio_dt,
-        Aula.status != "cancelada",
+    # A regra do sistema permite mais de 1 aluno na mesma aula (aula em grupo),
+    # desde que seja EXATAMENTE o mesmo horario (inicio/fim) e a mesma unidade.
+    # Fora isso, continua sendo conflito para evitar double-booking do professor.
+    conflito_q = (
+        select(Aula.inicio, Aula.fim, Agenda.unidade_id)
+        .join(Agenda, Agenda.id == Aula.agenda_id)
+        .where(
+            Aula.professor_id == professor_id,
+            Aula.inicio < fim_dt,
+            Aula.fim > inicio_dt,
+            Aula.status != "cancelada",
+        )
     )
     if ignore_aula_id:
-        conflito_aula_q = conflito_aula_q.where(Aula.id != ignore_aula_id)
-    conflito_aula = await db.scalar(conflito_aula_q.limit(1))
-    if conflito_aula:
-        return "Conflito: professor ja possui aula nesse horario"
+        conflito_q = conflito_q.where(Aula.id != ignore_aula_id)
+    conflitos = (await db.execute(conflito_q)).all()
+    if conflitos:
+        for r in conflitos:
+            ini_exist = r[0]
+            fim_exist = r[1]
+            un_exist = r[2]
+            if ini_exist != inicio_dt or fim_exist != fim_dt:
+                return "Conflito: professor ja possui aula nesse horario"
+            if unidade_id is not None and un_exist != unidade_id:
+                return "Conflito: professor ja possui aula nesse horario (outra unidade)"
+        # Todos os conflitos sao exatamente o mesmo slot + mesma unidade: permite (aula em grupo).
 
     # Bloqueios sao cadastrados em horario local do Brasil (America/Sao_Paulo).
     # Como armazenamos aulas em UTC (timestamptz), convertemos para BR antes de comparar.
