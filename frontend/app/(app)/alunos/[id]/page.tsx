@@ -216,10 +216,9 @@ export default function AlunoFichaPage() {
   useEffect(() => {
     if (!openContrato) return;
     const qtd = Number(qtdAulas || 0);
-    if (!qtd) {
-      setAgendaSemana([]);
-      return;
-    }
+    // Nao zere a agenda quando planos ainda estao carregando (evita "hora vazia" ao editar contrato).
+    // No fluxo de "Novo contrato" o estado ja e resetado explicitamente ao abrir o modal.
+    if (!qtd) return;
     setAgendaSemana((prev) => {
       const next = prev.slice(0, qtd);
       while (next.length < qtd) next.push({ dia: "", hora: "" });
@@ -925,7 +924,7 @@ export default function AlunoFichaPage() {
       </Modal>
 
       <Modal open={openContrato} onClose={() => { setOpenContrato(false); setEditingContratoId(null); }} title={editingContratoId ? "Editar contrato" : "Novo contrato"}>
-        <div className="space-y-4 pb-2">
+        <div className="space-y-4 pb-24">
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1">
               <p className="text-xs font-medium uppercase tracking-wide text-muted">Plano</p>
@@ -1025,7 +1024,7 @@ export default function AlunoFichaPage() {
 
           {msgContrato && <p className="text-sm text-danger">{msgContrato}</p>}
 
-          <div className="sticky bottom-0 -mx-5 bg-white/95 pt-3 pb-1 backdrop-blur">
+          <div className="sticky bottom-0 z-10 -mx-5 bg-white/95 pt-3 pb-2 backdrop-blur">
             <div className="px-5">
               <Button className="w-full" onClick={criarContrato}>
                 {editingContratoId ? "Salvar alteracoes do contrato" : "Salvar contrato e criar aulas"}
@@ -1115,7 +1114,9 @@ export default function AlunoFichaPage() {
             </div>
           )}
 
-          {descontoMsg && <p className="text-sm text-danger">{descontoMsg}</p>}
+          {descontoMsg && (
+            <p className={`text-sm ${descontoValor !== null ? "text-text" : "text-danger"}`}>{descontoMsg}</p>
+          )}
 
           <div className="flex items-center gap-2 pt-1">
             {descontoValor === null ? (

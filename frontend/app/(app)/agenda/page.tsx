@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarDays, CheckCircle2, Lock, MinusCircle, PhoneCall, Search, Pencil } from "lucide-react";
+import { CalendarDays, CheckCircle2, Lock, MinusCircle, PhoneCall, Search, Pencil, XCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Section } from "@/components/ui/section";
@@ -202,7 +202,7 @@ export default function AgendaPage() {
     return all.filter((a) => a.professor_nome?.toLowerCase().includes(q) || a.unidade?.toLowerCase().includes(q) || a.aluno_nome?.toLowerCase().includes(q));
   }, [data, busca]);
 
-  async function marcarStatus(aula: AulaApi, status: "realizada" | "falta_aviso" | "falta" | "agendada") {
+  async function marcarStatus(aula: AulaApi, status: "realizada" | "falta_aviso" | "falta" | "agendada" | "cancelada") {
     const alunoId = aula.aluno_id;
     if (!alunoId) return;
     const res = await fetch(`${API_URL}/alunos/${alunoId}/aulas/${aula.id}/status`, {
@@ -423,6 +423,13 @@ export default function AgendaPage() {
                   className="rounded-xl border border-border p-2 text-danger hover:bg-danger/10"
                 >
                   <MinusCircle size={16} />
+                </button>
+                <button
+                  title="Marcar cancelada"
+                  onClick={() => marcarStatus(a, "cancelada")}
+                  className="rounded-xl border border-border p-2 text-danger hover:bg-danger/10"
+                >
+                  <XCircle size={16} />
                 </button>
               </div>
               <Badge tone={statusMeta(a.status).tone}>{statusMeta(a.status).label}</Badge>
