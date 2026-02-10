@@ -390,8 +390,8 @@ export default function AgendaPage() {
               <p className="text-lg font-semibold text-primary">
                 {(a.data_br && a.hora_br) ? `${a.data_br} - ${a.hora_br}` : `${formatDateTimeBR(a.inicio).data} - ${formatDateTimeBR(a.inicio).hora}`}
               </p>
-              <p className="truncate font-medium">{a.professor_nome}</p>
-              <p className="truncate text-sm text-text">{a.aluno_nome || "Aluno"}</p>
+              <p className="truncate font-semibold text-text">{a.aluno_nome || "Aluno"}</p>
+              <p className="truncate text-sm text-muted">{a.professor_nome}</p>
               <p className="truncate text-sm text-muted">{a.unidade}</p>
             </div>
             <div className="flex shrink-0 items-center gap-2">
