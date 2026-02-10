@@ -92,6 +92,15 @@ export default function AlunoFichaPage() {
   const [contratoProfessorId, setContratoProfessorId] = useState("");
   const [editingContratoId, setEditingContratoId] = useState<number | null>(null);
   const [msgContrato, setMsgContrato] = useState<string>("");
+  const [openAtualizarAulas, setOpenAtualizarAulas] = useState(false);
+  const [atualizarAulasLoading, setAtualizarAulasLoading] = useState(false);
+  const [atualizarAulasMsg, setAtualizarAulasMsg] = useState<string | null>(null);
+  const [atualizarAulasCtx, setAtualizarAulasCtx] = useState<null | {
+    contratoId: number;
+    dias: string[];
+    agenda: AgendaSemanaItem[];
+    professorId: number;
+  }>(null);
   const [openReagendar, setOpenReagendar] = useState(false);
   const [aulaSelecionadaId, setAulaSelecionadaId] = useState<number | null>(null);
   const [reagendarData, setReagendarData] = useState("");
@@ -348,6 +357,7 @@ export default function AlunoFichaPage() {
     }
     const dias = agenda.map((a) => a.dia);
     setMsgContrato("");
+    const isEditing = Boolean(editingContratoId);
     const url = editingContratoId
       ? `${API_URL}/alunos/${data.id}/contratos/${editingContratoId}`
       : `${API_URL}/alunos/${data.id}/contratos`;
@@ -369,7 +379,16 @@ export default function AlunoFichaPage() {
     if (!res.ok) return;
     const body = await res.json().catch(() => ({}));
     let contratoIdReserva = editingContratoId || body?.contrato_id;
-    if (contratoIdReserva) {
+    if (!contratoIdReserva) {
+      setOpenContrato(false);
+      setEditingContratoId(null);
+      qc.invalidateQueries({ queryKey: ["aluno-ficha", params.id] });
+      return;
+    }
+
+    // Novo contrato: cria aulas automaticamente.
+    // Edicao: confirma com o usuario antes de recriar/atualizar aulas futuras.
+    if (!isEditing) {
       const reservaRes = await fetch(`${API_URL}/alunos/${data.id}/contratos/${contratoIdReserva}/reservas`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -385,15 +404,74 @@ export default function AlunoFichaPage() {
         const erro = await reservaRes.json().catch(() => ({}));
         setMsgContrato(erro.detail || "Contrato salvo, mas falhou ao reservar aulas.");
       }
+      setOpenContrato(false);
+      setEditingContratoId(null);
+      qc.invalidateQueries({ queryKey: ["aluno-ficha", params.id] });
+      if (body?.contrato_id) {
+        setMsgContrato("Contrato e aulas criados com sucesso.");
+      }
+      setTab("Aulas");
+      return;
     }
 
+    // Edicao: abre confirmacao para atualizar aulas futuras.
     setOpenContrato(false);
     setEditingContratoId(null);
+    setAtualizarAulasCtx({
+      contratoId: Number(contratoIdReserva),
+      dias,
+      agenda,
+      professorId: Number(contratoProfessorId),
+    });
+    setAtualizarAulasMsg(null);
+    setOpenAtualizarAulas(true);
     qc.invalidateQueries({ queryKey: ["aluno-ficha", params.id] });
-    if (!editingContratoId && body?.contrato_id) {
-      setMsgContrato("Contrato e aulas criados com sucesso.");
-    }
     setTab("Aulas");
+  }
+
+  async function atualizarAulasFuturasDoContrato(reset: boolean) {
+    if (!data || !atualizarAulasCtx) return;
+    if (!reset) {
+      setOpenAtualizarAulas(false);
+      setAtualizarAulasCtx(null);
+      return;
+    }
+    setAtualizarAulasLoading(true);
+    setAtualizarAulasMsg(null);
+    try {
+      const res = await fetch(`${API_URL}/alunos/${data.id}/contratos/${atualizarAulasCtx.contratoId}/reservas`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          dias_semana: atualizarAulasCtx.dias,
+          agenda_semana: atualizarAulasCtx.agenda,
+          duracao_minutos: 60,
+          unidade: data.unidade,
+          professor_id: atualizarAulasCtx.professorId,
+          reset_future: true,
+        }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setAtualizarAulasMsg(body?.detail || "Falha ao atualizar aulas. Tente novamente.");
+        return;
+      }
+      const removidas = Number(body?.aulas_removidas || 0);
+      const criadas = Number(body?.aulas_criadas || 0);
+      setAtualizarAulasMsg(`Aulas atualizadas: ${removidas} removidas, ${criadas} criadas.`);
+      // fecha apos um pequeno delay para dar feedback visual
+      window.setTimeout(() => {
+        setOpenAtualizarAulas(false);
+        setAtualizarAulasCtx(null);
+      }, 900);
+      qc.invalidateQueries({ queryKey: ["aluno-ficha", params.id] });
+      qc.invalidateQueries({ queryKey: ["agenda-v2"] });
+      qc.invalidateQueries({ queryKey: ["home-kpis"] });
+    } catch (e: any) {
+      setAtualizarAulasMsg("Falha de rede ao atualizar aulas. Tente novamente.");
+    } finally {
+      setAtualizarAulasLoading(false);
+    }
   }
 
   function abrirReagendar(aula: any) {
@@ -1030,6 +1108,42 @@ export default function AlunoFichaPage() {
                 {editingContratoId ? "Salvar alteracoes do contrato" : "Salvar contrato e criar aulas"}
               </Button>
             </div>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        open={openAtualizarAulas}
+        onClose={() => {
+          setOpenAtualizarAulas(false);
+          setAtualizarAulasCtx(null);
+          setAtualizarAulasMsg(null);
+        }}
+        title="Atualizar aulas do contrato?"
+      >
+        <div className="space-y-3">
+          <p className="text-sm text-text">
+            Deseja atualizar as aulas futuras deste contrato para refletir a nova agenda semanal?
+          </p>
+          <p className="text-xs text-muted">
+            Isso recria apenas aulas futuras que nao estao realizadas e nao foram descontadas.
+          </p>
+          {atualizarAulasMsg ? (
+            <p className={`text-sm ${atualizarAulasMsg.startsWith("Aulas atualizadas") ? "text-success" : "text-danger"}`}>
+              {atualizarAulasMsg}
+            </p>
+          ) : null}
+          <div className="grid gap-2 sm:grid-cols-2">
+            <button
+              className="rounded-2xl border border-border bg-white px-5 py-3 text-sm font-semibold text-text shadow-soft transition active:scale-[0.98] disabled:opacity-60"
+              onClick={() => atualizarAulasFuturasDoContrato(false)}
+              disabled={atualizarAulasLoading}
+            >
+              Nao
+            </button>
+            <Button onClick={() => atualizarAulasFuturasDoContrato(true)} disabled={atualizarAulasLoading}>
+              {atualizarAulasLoading ? "Atualizando..." : "Sim, atualizar aulas"}
+            </Button>
           </div>
         </div>
       </Modal>

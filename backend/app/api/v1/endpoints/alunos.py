@@ -783,6 +783,7 @@ async def criar_reservas_contrato(aluno_id: int, contrato_id: int, payload: dict
     await ensure_contracts_table(db)
     await ensure_contract_links(db)
     await ensure_bloqueios_table(db)
+    await ensure_aulas_desconto_columns(db)
     contrato = (
         await db.execute(
             text(
@@ -862,8 +863,31 @@ async def criar_reservas_contrato(aluno_id: int, contrato_id: int, payload: dict
     inicio_periodo = contrato[1]
     fim_periodo = contrato[2]
     valor = float(contrato[3] or 0)
+    reset_future = bool(payload.get("reset_future") or payload.get("reset"))
+    aulas_removidas = 0
     aulas_criadas = 0
+    # Ao editar um contrato, podemos opcionalmente "recriar" as aulas futuras para refletir os novos dias/horarios.
+    # Regra: nao mexer em aulas realizadas nem em aulas ja descontadas (estorno aplicado).
     data_cursor = inicio_periodo
+    if reset_future:
+        hoje_br = datetime.now(BR_TZ).date()
+        inicio_reset = hoje_br if hoje_br > inicio_periodo else inicio_periodo
+        inicio_reset_utc = datetime(inicio_reset.year, inicio_reset.month, inicio_reset.day, 0, 0, 0, tzinfo=BR_TZ).astimezone(timezone.utc)
+        del_res = await db.execute(
+            text(
+                """
+                DELETE FROM aulas
+                WHERE contrato_id = :cid
+                  AND aluno_id = :aluno_id
+                  AND inicio >= :inicio_utc
+                  AND LOWER(COALESCE(status, 'agendada')) <> 'realizada'
+                  AND COALESCE(descontada, FALSE) = FALSE
+                """
+            ),
+            {"cid": contrato_id, "aluno_id": aluno_id, "inicio_utc": inicio_reset_utc},
+        )
+        aulas_removidas = int(getattr(del_res, "rowcount", 0) or 0)
+        data_cursor = inicio_reset
 
     conflitos: list[str] = []
     while data_cursor <= fim_periodo:
@@ -914,7 +938,7 @@ async def criar_reservas_contrato(aluno_id: int, contrato_id: int, payload: dict
     )
 
     await db.commit()
-    return {"ok": True, "aulas_criadas": aulas_criadas, "conflitos": conflitos}
+    return {"ok": True, "aulas_criadas": aulas_criadas, "aulas_removidas": aulas_removidas, "conflitos": conflitos}
 
 
 @router.get("/{aluno_id}/aulas-avulsas/disponibilidade")
