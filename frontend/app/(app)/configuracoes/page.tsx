@@ -31,7 +31,7 @@ type Item = {
   id: number;
   titulo: string;
   detalhe: string;
-  status: "ativo" | "inativo";
+  status: "ativo" | "inativo" | "aberto" | "pago";
 };
 
 type PlanoApi = {
@@ -167,6 +167,7 @@ export default function ConfiguracoesPage() {
   const [titulo, setTitulo] = useState("");
   const [detalhe, setDetalhe] = useState("");
   const [status, setStatus] = useState<"ativo" | "inativo">("ativo");
+  const [contasReceberFiltroStatus, setContasReceberFiltroStatus] = useState<"aberto" | "pago" | "todos">("aberto");
   const [planoValor, setPlanoValor] = useState("");
   const [planoDuracao, setPlanoDuracao] = useState("Mensal");
   const [planoAulas, setPlanoAulas] = useState("");
@@ -380,11 +381,15 @@ CONTRATADA: ______________________`);
       }));
     }
     if (entidade === "contas_receber") {
-      return contasReceberApi.map((c) => ({
+      const filtradas =
+        contasReceberFiltroStatus === "todos"
+          ? contasReceberApi
+          : contasReceberApi.filter((c) => String(c.status || "").toLowerCase() === contasReceberFiltroStatus);
+      return filtradas.map((c) => ({
         id: c.id,
         titulo: `${c.aluno_nome}${c.plano_nome ? ` • ${c.plano_nome}` : ""}`,
         detalhe: `${Number(c.valor || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} • Venc: ${c.vencimento}${c.data_pagamento ? ` • Pago: ${c.data_pagamento}` : ""} • ${c.status}`,
-        status: String(c.status || "").toLowerCase() === "inativo" ? ("inativo" as const) : ("ativo" as const),
+        status: String(c.status || "").toLowerCase() === "pago" ? ("pago" as const) : ("aberto" as const),
       }));
     }
     if (entidade === "contas_pagar") {
@@ -409,7 +414,19 @@ CONTRATADA: ______________________`);
 
     // Entidades sem backend ainda: sem dados falsos.
     return [];
-  }, [entidade, planosApi, contasBancariasApi, unidadesApi, movimentacoesApi, categoriasApi, subcategoriasApi, contasReceberApi, contasPagarApi, regrasComissaoApi]);
+  }, [
+    entidade,
+    planosApi,
+    contasBancariasApi,
+    unidadesApi,
+    movimentacoesApi,
+    categoriasApi,
+    subcategoriasApi,
+    contasReceberApi,
+    contasReceberFiltroStatus,
+    contasPagarApi,
+    regrasComissaoApi,
+  ]);
   const categoriasAtivas = useMemo(
     () => categoriasApi.filter((x) => x.status === "ativo").map((x) => x.nome),
     [categoriasApi]
@@ -470,7 +487,7 @@ CONTRATADA: ______________________`);
     setEditId(item.id);
     setTitulo(item.titulo);
     setDetalhe(item.detalhe);
-    setStatus(item.status);
+    setStatus(item.status === "inativo" ? "inativo" : "ativo");
     if (entidade === "plano") {
       const plano = planosApi.find((p) => p.id === item.id);
       if (plano) {
@@ -729,9 +746,9 @@ CONTRATADA: ______________________`);
   return (
     <main className="space-y-5">
       <Section title={title} subtitle="Padrao premium com editar, deletar e modal de novo cadastro">
-        <div className="flex justify-end">
+        <div className="flex flex-wrap items-center gap-2">
           {entidade === "regras_comissao" && (
-            <div className="mr-auto flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2">
               <button
                 onClick={async () => {
                   const res = await fetch(`${API_URL}/comissoes/gerar-contas-pagar`, {
@@ -753,9 +770,25 @@ CONTRATADA: ______________________`);
               </button>
             </div>
           )}
-          <button onClick={openNovo} className="inline-flex h-10 items-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-white shadow-soft">
-            <Plus size={16} /> Novo
-          </button>
+          <div className="ml-auto flex items-center gap-2">
+            {entidade === "contas_receber" && (
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium text-muted">Status</span>
+                <select
+                  value={contasReceberFiltroStatus}
+                  onChange={(e) => setContasReceberFiltroStatus(e.target.value as "aberto" | "pago" | "todos")}
+                  className="h-10 rounded-xl border border-border bg-white px-3 text-sm text-text shadow-soft hover:bg-bg"
+                >
+                  <option value="aberto">Em aberto</option>
+                  <option value="pago">Pagas</option>
+                  <option value="todos">Todas</option>
+                </select>
+              </div>
+            )}
+            <button onClick={openNovo} className="inline-flex h-10 items-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-white shadow-soft">
+              <Plus size={16} /> Novo
+            </button>
+          </div>
         </div>
       </Section>
 
@@ -768,7 +801,17 @@ CONTRATADA: ______________________`);
                 <p className="text-sm text-muted">{item.detalhe}</p>
               </div>
               <div className="flex items-center gap-2">
-                <span className={`rounded-full px-3 py-1 text-xs ${item.status === "ativo" ? "bg-success/10 text-success" : "bg-danger/10 text-danger"}`}>
+                <span
+                  className={`rounded-full px-3 py-1 text-xs ${
+                    item.status === "ativo"
+                      ? "bg-success/10 text-success"
+                      : item.status === "inativo"
+                        ? "bg-danger/10 text-danger"
+                        : item.status === "pago"
+                          ? "bg-success/10 text-success"
+                          : "bg-primary/10 text-primary"
+                  }`}
+                >
                   {item.status}
                 </span>
                 {entidade !== "movimentacoes_financeiras" && (
