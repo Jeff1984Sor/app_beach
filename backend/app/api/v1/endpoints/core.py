@@ -47,8 +47,28 @@ async def delete_aula(aula_id: int, db: AsyncSession = Depends(get_db)):
 
 @router.get("/financeiro")
 async def list_financeiro(db: AsyncSession = Depends(get_db)):
-    movimentos = (await db.execute(select(MovimentoBancario))).scalars().all()
-    return [{"id": m.id, "tipo": m.tipo, "valor": float(m.valor), "data": m.data_movimento} for m in movimentos]
+    movimentos = (
+        (
+            await db.execute(
+                select(MovimentoBancario).order_by(
+                    MovimentoBancario.data_movimento.desc(), MovimentoBancario.id.desc()
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return [
+        {
+            "id": m.id,
+            "tipo": m.tipo,
+            "valor": float(m.valor),
+            "data": m.data_movimento.strftime("%Y-%m-%d") if m.data_movimento else None,
+            "data_br": m.data_movimento.strftime("%d/%m/%Y") if m.data_movimento else "--",
+            "descricao": m.descricao or "",
+        }
+        for m in movimentos
+    ]
 
 
 @router.post("/financeiro")

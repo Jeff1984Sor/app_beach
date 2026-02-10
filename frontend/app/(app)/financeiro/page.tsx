@@ -11,6 +11,37 @@ import { Button } from "@/components/ui/button";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
 
+function toBrDate(value: string | null | undefined) {
+  const v = String(value || "").trim();
+  if (!v) return "--";
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(v)) return v;
+  // Avoid timezone pitfalls: handle YYYY-MM-DD purely as string.
+  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) {
+    const [y, m, d] = v.split("-");
+    return `${d}/${m}/${y}`;
+  }
+  return v;
+}
+
+function toBRL(value: unknown) {
+  return Number(value || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+function parseAlunoFromDescricao(descricao: string) {
+  const d = (descricao || "").trim();
+  if (!d) return { aluno: "", extra: "" };
+
+  // Padrões existentes no backend: "Aluno + Plano" ou "Aluno • Plano"
+  for (const sep of [" + ", " • ", " - "]) {
+    const parts = d.split(sep).map((x) => x.trim()).filter(Boolean);
+    if (parts.length >= 2) {
+      return { aluno: parts[0], extra: parts.slice(1).join(sep.trim()) };
+    }
+  }
+
+  return { aluno: d, extra: "" };
+}
+
 async function fetchFinanceiro() {
   const res = await fetch(`${API_URL}/financeiro`, { cache: "no-store" });
   if (!res.ok) throw new Error("Falha ao carregar financeiro");
@@ -86,10 +117,29 @@ export default function FinanceiroPage() {
           {movimentos.map((m: any) => (
             <Card key={m.id} className="flex items-center justify-between p-4">
               <div>
-                <p className="font-semibold">{m.tipo}</p>
-                <p className="text-sm text-muted">R$ {Number(m.valor).toFixed(2)}</p>
+                {(() => {
+                  const tipoLower = String(m.tipo || "").toLowerCase();
+                  const isEntrada = ["entrada", "receita"].includes(tipoLower);
+                  const desc = String(m.descricao || "");
+                  const { aluno, extra } = parseAlunoFromDescricao(desc);
+                  const dataReceb = toBrDate(m.data_br || m.data);
+                  return (
+                    <>
+                      <p className="font-semibold">{isEntrada ? aluno || desc || "Entrada" : desc || m.tipo}</p>
+                      <p className="text-sm text-muted">
+                        {isEntrada && extra ? `${extra} • ` : ""}
+                        {isEntrada ? `Recebimento: ${dataReceb}` : `Data: ${dataReceb}`}
+                      </p>
+                    </>
+                  );
+                })()}
               </div>
-              <button onClick={() => apagar(m.id)} className="rounded-xl border border-border px-3 py-2 text-sm text-danger">Apagar</button>
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-semibold text-text">{toBRL(m.valor)}</p>
+                <button onClick={() => apagar(m.id)} className="rounded-xl border border-border px-3 py-2 text-sm text-danger">
+                  Apagar
+                </button>
+              </div>
             </Card>
           ))}
         </div>
