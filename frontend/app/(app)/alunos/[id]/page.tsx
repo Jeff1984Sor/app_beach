@@ -52,7 +52,12 @@ async function fetchFicha(id: string) {
 const tabs = ["Aulas", "Financeiro", "Contratos", "WhatsApp"];
 type PlanoOption = { nome: string; valor: number; recorrencia: string; aulasSemanais: number };
 type AgendaSemanaItem = { dia: string; hora: string };
-const horasCheias = Array.from({ length: 15 }, (_, i) => `${String(i + 7).padStart(2, "0")}:00`);
+const horariosSlots = Array.from({ length: 29 }, (_, i) => {
+  const totalMin = 7 * 60 + i * 30; // 07:00 ate 21:00, a cada 30min
+  const hh = String(Math.floor(totalMin / 60)).padStart(2, "0");
+  const mm = String(totalMin % 60).padStart(2, "0");
+  return `${hh}:${mm}`;
+});
 
 function aulaStatusMeta(statusRaw: string) {
   const s = String(statusRaw || "").toLowerCase();
@@ -965,14 +970,14 @@ export default function AlunoFichaPage() {
                         onChange={(e) => atualizarAgendaHora(idx, e.target.value)}
                         className="h-12 w-full rounded-2xl border border-border bg-white px-4 text-text outline-none"
                         disabled={!item.dia}
-                      >
-                        <option value="">Hora</option>
-                        {horasCheias.map((h) => (
-                          <option key={h} value={h}>
-                            {h}
-                          </option>
-                        ))}
-                      </select>
+                       >
+                         <option value="">Hora</option>
+                         {horariosSlots.map((h) => (
+                           <option key={h} value={h}>
+                             {h}
+                           </option>
+                         ))}
+                       </select>
                     </div>
                   </Card>
                 ))}
@@ -1003,7 +1008,7 @@ export default function AlunoFichaPage() {
           <Input type="date" value={reagendarData} onChange={(e) => setReagendarData(e.target.value)} />
           <select value={reagendarHora} onChange={(e) => setReagendarHora(e.target.value)} className="h-12 w-full rounded-2xl border border-border bg-white px-4 text-text outline-none">
             <option value="">Selecione o horario</option>
-            {horasCheias.map((h) => (
+            {horariosSlots.map((h) => (
               <option key={h} value={h}>{h}</option>
             ))}
           </select>

@@ -13,7 +13,12 @@ import { useAuthStore } from "@/store/auth";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
 const dias = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sab", "Dom"];
-const horas = Array.from({ length: 15 }, (_, i) => `${String(i + 7).padStart(2, "0")}:00`);
+const horas = Array.from({ length: 29 }, (_, i) => {
+  const totalMin = 7 * 60 + i * 30; // 07:00 ate 21:00, a cada 30min
+  const hh = String(Math.floor(totalMin / 60)).padStart(2, "0");
+  const mm = String(totalMin % 60).padStart(2, "0");
+  return `${hh}:${mm}`;
+});
 
 type Professor = { id: number; usuario_id: number; nome: string };
 type AulaApi = {

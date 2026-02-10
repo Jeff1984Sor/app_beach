@@ -280,7 +280,13 @@ async def slot_em_conflito(
     return None
 
 def gerar_horas_cheias(inicio_h: int = 7, fim_h: int = 21) -> list[str]:
-    return [f"{h:02d}:00" for h in range(inicio_h, fim_h + 1)]
+    # Apesar do nome, retornamos slots de 30min (hora cheia e meia) para facilitar contratos/aulas avulsas.
+    slots: list[str] = []
+    for h in range(inicio_h, fim_h):
+        slots.append(f"{h:02d}:00")
+        slots.append(f"{h:02d}:30")
+    slots.append(f"{fim_h:02d}:00")
+    return slots
 
 
 async def listar_horarios_disponiveis(

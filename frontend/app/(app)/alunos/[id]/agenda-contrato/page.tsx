@@ -10,7 +10,12 @@ import { Section } from "@/components/ui/section";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
 const diasFixos = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sab", "Dom"];
-const horasCheias = Array.from({ length: 15 }, (_, i) => `${String(i + 7).padStart(2, "0")}:00`);
+const horariosSlots = Array.from({ length: 29 }, (_, i) => {
+  const totalMin = 7 * 60 + i * 30; // 07:00 ate 21:00, a cada 30min
+  const hh = String(Math.floor(totalMin / 60)).padStart(2, "0");
+  const mm = String(totalMin % 60).padStart(2, "0");
+  return `${hh}:${mm}`;
+});
 
 export default function AgendaContratoPage() {
   const params = useParams<{ id: string }>();
@@ -20,7 +25,7 @@ export default function AgendaContratoPage() {
   const horaQuery = search.get("hora");
   const unidadeQuery = search.get("unidade");
   const [dias, setDias] = useState<string[]>(["Seg", "Qua", "Sex"]);
-  const [horaInicio, setHoraInicio] = useState(horaQuery && horasCheias.includes(horaQuery) ? horaQuery : "18:00");
+  const [horaInicio, setHoraInicio] = useState(horaQuery && horariosSlots.includes(horaQuery) ? horaQuery : "18:00");
   const [duracao, setDuracao] = useState("60");
   const [unidade, setUnidade] = useState(unidadeQuery || "");
   const [erro, setErro] = useState("");
@@ -85,7 +90,7 @@ export default function AgendaContratoPage() {
           </div>
           <div className="grid gap-3 sm:grid-cols-3">
             <select value={horaInicio} onChange={(e) => setHoraInicio(e.target.value)} className="h-12 w-full rounded-2xl border border-border bg-white px-4 text-text outline-none">
-              {horasCheias.map((h) => (
+              {horariosSlots.map((h) => (
                 <option key={h} value={h}>{h}</option>
               ))}
             </select>
