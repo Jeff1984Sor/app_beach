@@ -121,6 +121,7 @@ export default function AlunoFichaPage() {
   const [avulsaCategoria, setAvulsaCategoria] = useState("");
   const [avulsaSubcategoria, setAvulsaSubcategoria] = useState("");
   const [avulsaMsg, setAvulsaMsg] = useState("");
+  const [alunoDeleting, setAlunoDeleting] = useState(false);
 
   const { data, isLoading } = useQuery({ queryKey: ["aluno-ficha", params.id], queryFn: () => fetchFicha(params.id) });
   const { data: unidades = [] } = useQuery<{ id: number; nome: string }[]>({
@@ -482,6 +483,26 @@ export default function AlunoFichaPage() {
     }
   }
 
+  async function excluirAlunoAtual() {
+    if (!data?.id) return;
+    if (!window.confirm("Deseja realmente excluir este aluno? Isso apagara aulas e financeiro vinculados.")) return;
+    setAlunoDeleting(true);
+    try {
+      const res = await fetch(`${API_URL}/alunos/${data.id}`, { method: "DELETE" });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        window.alert(body?.detail || "Nao foi possivel excluir o aluno.");
+        return;
+      }
+      qc.invalidateQueries({ queryKey: ["alunos-lista"] });
+      qc.invalidateQueries({ queryKey: ["aluno-ficha", params.id] });
+      window.alert("Aluno excluido com sucesso.");
+      router.push("/alunos");
+    } finally {
+      setAlunoDeleting(false);
+    }
+  }
+
   async function deletarAula(aulaId: number) {
     if (!data) return;
     if (!window.confirm("Deseja realmente deletar esta aula?")) return;
@@ -648,18 +669,27 @@ export default function AlunoFichaPage() {
   return (
     <main className="space-y-5">
       <Card className="space-y-4 p-5">
-        <div className="flex items-start justify-between">
-          <div>
-            <h1 className="text-3xl font-semibold tracking-tight">{data.nome}</h1>
-            <p className="mt-1 text-sm text-muted">{data.telefone || "Sem telefone"} • {data.unidade}</p>
-            <p className="mt-1 text-xs text-muted">Email: {data.email || "Nao informado"} • Aniversario: {formatarDataBR(data.data_aniversario || "") || "Nao informado"} • Idade: {calcularIdade(data.data_aniversario || "") || "Nao informada"}</p>
-            <p className="mt-1 text-xs text-muted">Endereco: {data.endereco || "Nao informado"}</p>
+          <div className="flex items-start justify-between">
+            <div>
+              <h1 className="text-3xl font-semibold tracking-tight">{data.nome}</h1>
+              <p className="mt-1 text-sm text-muted">{data.telefone || "Sem telefone"} • {data.unidade}</p>
+              <p className="mt-1 text-xs text-muted">Email: {data.email || "Nao informado"} • Aniversario: {formatarDataBR(data.data_aniversario || "") || "Nao informado"} • Idade: {calcularIdade(data.data_aniversario || "") || "Nao informada"}</p>
+              <p className="mt-1 text-xs text-muted">Endereco: {data.endereco || "Nao informado"}</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Badge tone={data.status === "ativo" ? "success" : "danger"}>{data.status}</Badge>
+              <button onClick={abrirEdicao} className="rounded-xl border border-border p-2 text-muted"><Pencil size={16} /></button>
+              <button
+                type="button"
+                title="Excluir aluno"
+                onClick={excluirAlunoAtual}
+                disabled={alunoDeleting}
+                className="rounded-xl border border-border p-2 text-danger disabled:opacity-60"
+              >
+                <Trash2 size={16} />
+              </button>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Badge tone={data.status === "ativo" ? "success" : "danger"}>{data.status}</Badge>
-            <button onClick={abrirEdicao} className="rounded-xl border border-border p-2 text-muted"><Pencil size={16} /></button>
-          </div>
-        </div>
         <div className="grid gap-2 sm:grid-cols-3">
           <a href={`https://wa.me/55${String(data.telefone || "").replace(/\D/g, "")}`} target="_blank" className="rounded-2xl border border-border bg-white px-4 py-3 text-sm font-medium text-text"> <MessageCircle size={15} className="mr-2 inline" /> WhatsApp </a>
           <button
