@@ -99,11 +99,11 @@ export default function AlunosPage() {
         </div>
       </Section>
 
-      <section className="space-y-5">
+      <section className="flex flex-col gap-4">
         {isLoading && Array.from({ length: 4 }).map((_, i) => <Card key={i} className="h-24 animate-pulse bg-white/90" />)}
 
         {!isLoading && filtrados.map((aluno) => (
-          <Link key={aluno.id} href={`/alunos/${aluno.id}`}>
+          <Link key={aluno.id} href={`/alunos/${aluno.id}`} className="block">
             <motion.div whileTap={{ scale: 0.99 }} whileHover={{ y: -1 }}>
               <Card className="flex items-center justify-between p-5 transition hover:shadow-md">
                 <div className="space-y-1">
