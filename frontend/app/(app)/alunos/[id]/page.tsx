@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
-import { CalendarPlus, CheckCircle2, MessageCircle, MinusCircle, Pencil, PhoneCall, Trash2 } from "lucide-react";
+import { CalendarPlus, CheckCircle2, MessageCircle, MinusCircle, Pencil, PhoneCall, Trash2, XCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Section } from "@/components/ui/section";
@@ -490,7 +490,7 @@ export default function AlunoFichaPage() {
     qc.invalidateQueries({ queryKey: ["aluno-ficha", params.id] });
   }
 
-  async function marcarStatusAula(aulaId: number, status: "realizada" | "falta_aviso" | "falta" | "agendada") {
+  async function marcarStatusAula(aulaId: number, status: "realizada" | "falta_aviso" | "falta" | "agendada" | "cancelada") {
     if (!data) return;
     const res = await fetch(`${API_URL}/alunos/${data.id}/aulas/${aulaId}/status`, {
       method: "PUT",
@@ -763,6 +763,13 @@ export default function AlunoFichaPage() {
                         className="rounded-xl border border-border px-3 py-2 text-sm text-text hover:bg-bg"
                       >
                         <CalendarPlus size={16} className="mr-2 inline" /> Agendada
+                      </button>
+                      <button
+                        title="Marcar como cancelada"
+                        onClick={() => marcarStatusAula(a.id, "cancelada")}
+                        className="rounded-xl border border-border px-3 py-2 text-sm text-danger hover:bg-danger/10"
+                      >
+                        <XCircle size={16} className="mr-2 inline" /> Cancelada
                       </button>
                       <button onClick={() => abrirDesconto(a)} className="rounded-xl border border-border px-3 py-2 text-sm text-text hover:bg-bg">
                         <MinusCircle size={16} className="mr-2 inline text-danger" /> Descontar
