@@ -30,6 +30,15 @@ type ContaReceber = {
   status: string;
 };
 
+type ContaReceberAgg = {
+  aluno_id?: number;
+  aluno_nome: string;
+  total: number;
+  qtd: number;
+  proximo_vencimento: string;
+  proxima_conta: ContaReceber;
+};
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
 
 function iconFor(label: string) {
@@ -43,6 +52,27 @@ function iconFor(label: string) {
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
+}
+
+function brDateToEpoch(d: string) {
+  const s = String(d || "").trim();
+  // Accepts DD/MM/YYYY or YYYY-MM-DD; falls back to 0.
+  if (!s) return 0;
+  if (s.includes("/")) {
+    const [dd, mm, yyyy] = s.split("/");
+    const y = Number(yyyy);
+    const m = Number(mm);
+    const day = Number(dd);
+    if (!y || !m || !day) return 0;
+    return Date.UTC(y, m - 1, day);
+  }
+  const iso = s.slice(0, 10);
+  const [yyyy, mm, dd] = iso.split("-");
+  const y = Number(yyyy);
+  const m = Number(mm);
+  const day = Number(dd);
+  if (!y || !m || !day) return 0;
+  return Date.UTC(y, m - 1, day);
 }
 
 export default function HomePage() {
@@ -140,7 +170,40 @@ export default function HomePage() {
   const aulasHoje = (agendaHoje?.aulas || [])
     .filter((a) => String(a.status || "").toLowerCase() !== "realizada")
     .slice(0, 6);
-  const contasAbertas = (pendencias || []).slice(0, 6);
+
+  const contasAbertasPorAluno = useMemo(() => {
+    const m = new Map<string, ContaReceberAgg>();
+    for (const c of pendencias || []) {
+      const key = c.aluno_id ? `id:${c.aluno_id}` : `nome:${String(c.aluno_nome || "").toLowerCase()}`;
+      const existing = m.get(key);
+      if (!existing) {
+        m.set(key, {
+          aluno_id: c.aluno_id,
+          aluno_nome: c.aluno_nome,
+          total: Number(c.valor || 0),
+          qtd: 1,
+          proximo_vencimento: c.vencimento,
+          proxima_conta: c,
+        });
+        continue;
+      }
+      existing.total += Number(c.valor || 0);
+      existing.qtd += 1;
+
+      if (brDateToEpoch(c.vencimento) && brDateToEpoch(c.vencimento) < brDateToEpoch(existing.proximo_vencimento)) {
+        existing.proximo_vencimento = c.vencimento;
+        existing.proxima_conta = c;
+      }
+    }
+    return Array.from(m.values()).sort((a, b) => {
+      const da = brDateToEpoch(a.proximo_vencimento);
+      const db = brDateToEpoch(b.proximo_vencimento);
+      if (da !== db) return da - db;
+      return b.total - a.total;
+    });
+  }, [pendencias]);
+
+  const contasAbertas = contasAbertasPorAluno.slice(0, 6);
 
   return (
     <main className="space-y-5">
@@ -256,22 +319,24 @@ export default function HomePage() {
               )}
               {!pendLoading &&
                 contasAbertas.map((c) => (
-                  <div key={c.id} className="rounded-2xl border border-border bg-white p-4">
+                  <div key={c.aluno_id || c.aluno_nome} className="rounded-2xl border border-border bg-white p-4">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="truncate font-semibold text-text">{c.aluno_nome}</p>
-                        <p className="truncate text-sm text-muted">{c.plano_nome || "Sem plano"} • Venc: {c.vencimento}</p>
+                        <p className="truncate text-sm text-muted">
+                          {c.qtd} em aberto • Próx: {c.proximo_vencimento}
+                        </p>
                       </div>
                       <div className="shrink-0 text-right">
                         <p className="font-semibold text-text">
-                          {Number(c.valor || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                          {Number(c.total || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
                         </p>
                         <button
                           type="button"
-                          onClick={() => abrirPagar(c)}
+                          onClick={() => abrirPagar(c.proxima_conta)}
                           className="mt-2 inline-flex h-9 items-center rounded-2xl bg-success px-4 text-sm font-semibold text-white shadow-soft"
                         >
-                          Pagar
+                          Pagar próxima
                         </button>
                       </div>
                     </div>
