@@ -30,6 +30,7 @@ type AulaApi = {
   professor_nome: string;
   unidade: string;
   aluno_id?: number;
+  aluno_nome?: string;
   data_br?: string;
   hora_br?: string;
 };
@@ -192,7 +193,7 @@ export default function AgendaPage() {
     const all = data?.aulas || [];
     if (!busca.trim()) return all;
     const q = busca.toLowerCase();
-    return all.filter((a) => a.professor_nome?.toLowerCase().includes(q) || a.unidade?.toLowerCase().includes(q));
+    return all.filter((a) => a.professor_nome?.toLowerCase().includes(q) || a.unidade?.toLowerCase().includes(q) || a.aluno_nome?.toLowerCase().includes(q));
   }, [data, busca]);
 
   async function marcarStatus(aula: AulaApi, status: "realizada" | "falta_aviso" | "falta" | "agendada") {
@@ -384,6 +385,7 @@ export default function AgendaPage() {
                 {(a.data_br && a.hora_br) ? `${a.data_br} - ${a.hora_br}` : `${formatDateTimeBR(a.inicio).data} - ${formatDateTimeBR(a.inicio).hora}`}
               </p>
               <p className="truncate font-medium">{a.professor_nome}</p>
+              <p className="truncate text-sm text-text">{a.aluno_nome || "Aluno"}</p>
               <p className="truncate text-sm text-muted">{a.unidade}</p>
             </div>
             <div className="flex shrink-0 items-center gap-2">

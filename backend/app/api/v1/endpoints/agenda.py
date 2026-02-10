@@ -3,9 +3,10 @@ from datetime import date, datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select, text, func
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from app.db.session import get_db
-from app.models.entities import Agenda, Aula, Profissional, Unidade, Usuario
+from app.models.entities import Agenda, Aula, Profissional, Unidade, Usuario, Aluno
 
 router = APIRouter(prefix="/agenda", tags=["agenda"])
 
@@ -86,6 +87,7 @@ async def listar_professores(db: AsyncSession = Depends(get_db)):
 async def listar_agenda(data: date | None = None, profissional_id: int | None = None, db: AsyncSession = Depends(get_db)):
     await ensure_bloqueios_table(db)
     dia = data or date.today()
+    UsuarioAluno = aliased(Usuario)
 
     aulas_q = (
         select(
@@ -96,6 +98,7 @@ async def listar_agenda(data: date | None = None, profissional_id: int | None = 
             Aula.professor_id,
             func.coalesce(Usuario.nome, "Sem professor").label("professor_nome"),
             Aula.aluno_id,
+            func.coalesce(UsuarioAluno.nome, "").label("aluno_nome"),
             func.coalesce(Unidade.nome, "").label("unidade_nome"),
             func.to_char(func.timezone(BR_TZ_NAME, Aula.inicio), "DD/MM/YYYY").label("data_br"),
             func.to_char(func.timezone(BR_TZ_NAME, Aula.inicio), "HH24:MI").label("hora_br"),
@@ -103,6 +106,8 @@ async def listar_agenda(data: date | None = None, profissional_id: int | None = 
         .join(Agenda, Aula.agenda_id == Agenda.id, isouter=True)
         .join(Profissional, Profissional.id == Aula.professor_id, isouter=True)
         .join(Usuario, Usuario.id == Profissional.usuario_id, isouter=True)
+        .join(Aluno, Aluno.id == Aula.aluno_id, isouter=True)
+        .join(UsuarioAluno, UsuarioAluno.id == Aluno.usuario_id, isouter=True)
         .join(Unidade, Unidade.id == Agenda.unidade_id, isouter=True)
         # Stored as timestamptz (UTC). Filter by Brazil-local date.
         .where(func.date(func.timezone(BR_TZ_NAME, Aula.inicio)) == dia)
@@ -144,9 +149,10 @@ async def listar_agenda(data: date | None = None, profissional_id: int | None = 
                 "professor_id": r[4],
                 "professor_nome": r[5],
                 "aluno_id": r[6],
-                "unidade": r[7] or "",
-                "data_br": r[8],
-                "hora_br": r[9],
+                "aluno_nome": r[7] or "",
+                "unidade": r[8] or "",
+                "data_br": r[9],
+                "hora_br": r[10],
             }
             for r in aulas_rows
         ],
@@ -176,6 +182,7 @@ async def listar_agenda_periodo(
     await ensure_bloqueios_table(db)
     if data_fim < data_inicio:
         data_fim = data_inicio
+    UsuarioAluno = aliased(Usuario)
 
     aulas_q = (
         select(
@@ -186,6 +193,7 @@ async def listar_agenda_periodo(
             Aula.professor_id,
             func.coalesce(Usuario.nome, "Sem professor").label("professor_nome"),
             Aula.aluno_id,
+            func.coalesce(UsuarioAluno.nome, "").label("aluno_nome"),
             func.coalesce(Unidade.nome, "").label("unidade_nome"),
             func.date(Aula.inicio).label("data"),
             func.to_char(func.timezone(BR_TZ_NAME, Aula.inicio), "DD/MM/YYYY").label("data_br"),
@@ -194,6 +202,8 @@ async def listar_agenda_periodo(
         .join(Agenda, Aula.agenda_id == Agenda.id, isouter=True)
         .join(Profissional, Profissional.id == Aula.professor_id, isouter=True)
         .join(Usuario, Usuario.id == Profissional.usuario_id, isouter=True)
+        .join(Aluno, Aluno.id == Aula.aluno_id, isouter=True)
+        .join(UsuarioAluno, UsuarioAluno.id == Aluno.usuario_id, isouter=True)
         .join(Unidade, Unidade.id == Agenda.unidade_id, isouter=True)
         .where(func.date(func.timezone(BR_TZ_NAME, Aula.inicio)).between(data_inicio, data_fim))
         .order_by(Aula.inicio.asc())
@@ -235,10 +245,11 @@ async def listar_agenda_periodo(
                 "professor_id": r[4],
                 "professor_nome": r[5],
                 "aluno_id": r[6],
-                "unidade": r[7] or "",
-                "data": r[8].strftime("%Y-%m-%d") if r[8] else None,
-                "data_br": r[9],
-                "hora_br": r[10],
+                "aluno_nome": r[7] or "",
+                "unidade": r[8] or "",
+                "data": r[9].strftime("%Y-%m-%d") if r[9] else None,
+                "data_br": r[10],
+                "hora_br": r[11],
             }
             for r in aulas_rows
         ],
