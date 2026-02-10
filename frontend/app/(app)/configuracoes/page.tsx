@@ -24,7 +24,6 @@ type Entidade =
   | "categoria"
   | "subcategoria"
   | "modelo_contrato"
-  | "media_files"
   ;
 
 type Item = {
@@ -137,7 +136,6 @@ const LABELS: Record<Entidade, string> = {
   categoria: "Categoria",
   subcategoria: "Subcategoria",
   modelo_contrato: "Modelo de Contrato",
-  media_files: "Media Files",
 };
 
 export default function ConfiguracoesPage() {
@@ -158,7 +156,6 @@ export default function ConfiguracoesPage() {
     "categoria",
     "subcategoria",
     "modelo_contrato",
-    "media_files",
   ];
   const entidade = (entidadeParam && entidadesValidas.includes(entidadeParam as Entidade) ? entidadeParam : "categoria") as Entidade;
 

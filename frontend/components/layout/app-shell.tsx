@@ -20,7 +20,6 @@ const tabelas = [
   { nome: "Conta Bancaria", href: "/configuracoes?entidade=conta_bancaria" },
   { nome: "Contas Pagar", href: "/configuracoes?entidade=contas_pagar" },
   { nome: "Contas Receber", href: "/configuracoes?entidade=contas_receber" },
-  { nome: "Media Files", href: "/configuracoes?entidade=media_files" },
   { nome: "Modelo de Contrato", href: "/configuracoes?entidade=modelo_contrato" },
   { nome: "Movimentacoes Financeiras", href: "/configuracoes?entidade=movimentacoes_financeiras" },
   { nome: "Plano", href: "/configuracoes?entidade=plano" },
