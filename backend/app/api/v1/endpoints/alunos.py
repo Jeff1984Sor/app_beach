@@ -422,7 +422,13 @@ async def get_details(db: AsyncSession, aluno_id: int) -> dict:
 @router.get("")
 async def list_alunos(db: AsyncSession = Depends(get_db)):
     await ensure_details_table(db)
-    rows = (await db.execute(select(Aluno, Usuario).join(Usuario, Usuario.id == Aluno.usuario_id))).all()
+    rows = (
+        await db.execute(
+            select(Aluno, Usuario)
+            .join(Usuario, Usuario.id == Aluno.usuario_id)
+            .order_by(Usuario.nome.asc())
+        )
+    ).all()
     result = []
     for aluno, user in rows:
         d = await get_details(db, aluno.id)

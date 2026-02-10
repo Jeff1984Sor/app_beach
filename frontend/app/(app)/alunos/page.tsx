@@ -61,12 +61,15 @@ export default function AlunosPage() {
   const unidades = useMemo(() => ["todas", ...Array.from(new Set(data.map((x) => x.unidade)))], [data]);
 
   const filtrados = useMemo(() => {
-    return data.filter((a) => {
-      const bySearch = !debouncedSearch || a.nome.toLowerCase().includes(debouncedSearch) || (a.telefone || "").toLowerCase().includes(debouncedSearch);
-      const byStatus = statusFilter === "todos" || a.status === statusFilter;
-      const byUnidade = unidadeFilter === "todas" || a.unidade === unidadeFilter;
-      return bySearch && byStatus && byUnidade;
-    });
+    return data
+      .filter((a) => {
+        const bySearch =
+          !debouncedSearch || a.nome.toLowerCase().includes(debouncedSearch) || (a.telefone || "").toLowerCase().includes(debouncedSearch);
+        const byStatus = statusFilter === "todos" || a.status === statusFilter;
+        const byUnidade = unidadeFilter === "todas" || a.unidade === unidadeFilter;
+        return bySearch && byStatus && byUnidade;
+      })
+      .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR", { sensitivity: "base" }));
   }, [data, debouncedSearch, statusFilter, unidadeFilter]);
 
   return (
