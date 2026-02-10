@@ -1,4 +1,5 @@
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select, text, func
@@ -10,7 +11,22 @@ from app.models.entities import Agenda, Aula, Profissional, Unidade, Usuario, Al
 
 router = APIRouter(prefix="/agenda", tags=["agenda"])
 
-BR_TZ_NAME = "America/Sao_Paulo"
+BR_TZ = ZoneInfo("America/Sao_Paulo")
+
+
+def br_day_bounds_utc(d: date) -> tuple[datetime, datetime]:
+    """Return [start,end) of a Brazil-local day, converted to UTC for querying timestamptz."""
+    start_local = datetime(d.year, d.month, d.day, 0, 0, 0, tzinfo=BR_TZ)
+    end_local = start_local + timedelta(days=1)
+    return start_local.astimezone(timezone.utc), end_local.astimezone(timezone.utc)
+
+
+def dt_to_br_fields(dt: datetime) -> tuple[str, str, str]:
+    """Return (data_iso, data_br, hora_br) in America/Sao_Paulo."""
+    if not dt:
+        return "", "", ""
+    dt_br = dt.astimezone(BR_TZ) if getattr(dt, "tzinfo", None) else dt.replace(tzinfo=timezone.utc).astimezone(BR_TZ)
+    return dt_br.date().strftime("%Y-%m-%d"), dt_br.strftime("%d/%m/%Y"), dt_br.strftime("%H:%M")
 
 
 async def ensure_bloqueios_table(db: AsyncSession):
@@ -87,6 +103,7 @@ async def listar_professores(db: AsyncSession = Depends(get_db)):
 async def listar_agenda(data: date | None = None, profissional_id: int | None = None, db: AsyncSession = Depends(get_db)):
     await ensure_bloqueios_table(db)
     dia = data or date.today()
+    inicio_utc, fim_utc = br_day_bounds_utc(dia)
     UsuarioAluno = aliased(Usuario)
 
     aulas_q = (
@@ -100,8 +117,6 @@ async def listar_agenda(data: date | None = None, profissional_id: int | None = 
             Aula.aluno_id,
             func.coalesce(UsuarioAluno.nome, "").label("aluno_nome"),
             func.coalesce(Unidade.nome, "").label("unidade_nome"),
-            func.to_char(func.timezone(BR_TZ_NAME, Aula.inicio), "DD/MM/YYYY").label("data_br"),
-            func.to_char(func.timezone(BR_TZ_NAME, Aula.inicio), "HH24:MI").label("hora_br"),
         )
         .join(Agenda, Aula.agenda_id == Agenda.id, isouter=True)
         .join(Profissional, Profissional.id == Aula.professor_id, isouter=True)
@@ -109,8 +124,9 @@ async def listar_agenda(data: date | None = None, profissional_id: int | None = 
         .join(Aluno, Aluno.id == Aula.aluno_id, isouter=True)
         .join(UsuarioAluno, UsuarioAluno.id == Aluno.usuario_id, isouter=True)
         .join(Unidade, Unidade.id == Agenda.unidade_id, isouter=True)
-        # Stored as timestamptz (UTC). Filter by Brazil-local date.
-        .where(func.date(func.timezone(BR_TZ_NAME, Aula.inicio)) == dia)
+        # Stored as timestamptz (UTC). Query by Brazil-local day bounds.
+        .where(Aula.inicio >= inicio_utc)
+        .where(Aula.inicio < fim_utc)
         .order_by(Aula.inicio.asc())
     )
     if profissional_id:
@@ -151,8 +167,8 @@ async def listar_agenda(data: date | None = None, profissional_id: int | None = 
                 "aluno_id": r[6],
                 "aluno_nome": r[7] or "",
                 "unidade": r[8] or "",
-                "data_br": r[9],
-                "hora_br": r[10],
+                "data_br": dt_to_br_fields(r[1])[1],
+                "hora_br": dt_to_br_fields(r[1])[2],
             }
             for r in aulas_rows
         ],
@@ -182,6 +198,8 @@ async def listar_agenda_periodo(
     await ensure_bloqueios_table(db)
     if data_fim < data_inicio:
         data_fim = data_inicio
+    inicio_utc, _ = br_day_bounds_utc(data_inicio)
+    _, fim_utc = br_day_bounds_utc(data_fim)
     UsuarioAluno = aliased(Usuario)
 
     aulas_q = (
@@ -195,9 +213,6 @@ async def listar_agenda_periodo(
             Aula.aluno_id,
             func.coalesce(UsuarioAluno.nome, "").label("aluno_nome"),
             func.coalesce(Unidade.nome, "").label("unidade_nome"),
-            func.date(Aula.inicio).label("data"),
-            func.to_char(func.timezone(BR_TZ_NAME, Aula.inicio), "DD/MM/YYYY").label("data_br"),
-            func.to_char(func.timezone(BR_TZ_NAME, Aula.inicio), "HH24:MI").label("hora_br"),
         )
         .join(Agenda, Aula.agenda_id == Agenda.id, isouter=True)
         .join(Profissional, Profissional.id == Aula.professor_id, isouter=True)
@@ -205,7 +220,8 @@ async def listar_agenda_periodo(
         .join(Aluno, Aluno.id == Aula.aluno_id, isouter=True)
         .join(UsuarioAluno, UsuarioAluno.id == Aluno.usuario_id, isouter=True)
         .join(Unidade, Unidade.id == Agenda.unidade_id, isouter=True)
-        .where(func.date(func.timezone(BR_TZ_NAME, Aula.inicio)).between(data_inicio, data_fim))
+        .where(Aula.inicio >= inicio_utc)
+        .where(Aula.inicio < fim_utc)
         .order_by(Aula.inicio.asc())
     )
     if profissional_id:
@@ -247,9 +263,9 @@ async def listar_agenda_periodo(
                 "aluno_id": r[6],
                 "aluno_nome": r[7] or "",
                 "unidade": r[8] or "",
-                "data": r[9].strftime("%Y-%m-%d") if r[9] else None,
-                "data_br": r[10],
-                "hora_br": r[11],
+                "data": dt_to_br_fields(r[1])[0],
+                "data_br": dt_to_br_fields(r[1])[1],
+                "hora_br": dt_to_br_fields(r[1])[2],
             }
             for r in aulas_rows
         ],

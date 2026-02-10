@@ -110,6 +110,7 @@ export default function AgendaPage() {
   const [modo, setModo] = useState<"dia" | "semana" | "mes">("dia");
   const [dataRef, setDataRef] = useState(todayIso());
   const [professorId, setProfessorId] = useState<string>("todos");
+  const [didAutoDefaultProfessor, setDidAutoDefaultProfessor] = useState(false);
   const [busca, setBusca] = useState("");
   const [openBloqueio, setOpenBloqueio] = useState(false);
   const [bloqInicio, setBloqInicio] = useState(todayIso());
@@ -151,11 +152,16 @@ export default function AgendaPage() {
   });
 
   useEffect(() => {
+    // Default: when a professor logs in, preselect their own agenda.
+    // IMPORTANT: run only once so the user can manually switch back to "Todos os professores".
+    if (didAutoDefaultProfessor) return;
     if (professorId !== "todos") return;
     if (!me || me.role !== "professor") return;
     const prof = professores.find((p) => p.usuario_id === me.id);
-    if (prof) setProfessorId(String(prof.id));
-  }, [me, professores, professorId]);
+    if (!prof) return;
+    setProfessorId(String(prof.id));
+    setDidAutoDefaultProfessor(true);
+  }, [me, professores, professorId, didAutoDefaultProfessor]);
 
   const { data, isLoading } = useQuery<{ aulas: AulaApi[]; bloqueios: BloqueioApi[] }>({
     queryKey: ["agenda-v2", modo, dataRef, professorId],
