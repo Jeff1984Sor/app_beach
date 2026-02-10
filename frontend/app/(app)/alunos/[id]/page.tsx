@@ -845,60 +845,90 @@ export default function AlunoFichaPage() {
       </Modal>
 
       <Modal open={openContrato} onClose={() => { setOpenContrato(false); setEditingContratoId(null); }} title={editingContratoId ? "Editar contrato" : "Novo contrato"}>
-        <div className="space-y-3">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted">Plano</p>
-          <select value={planoNome} onChange={(e) => selecionarPlano(e.target.value)} className="h-12 w-full rounded-2xl border border-border bg-white px-4 text-text outline-none">
-            <option value="">Selecione o plano</option>
-            {planos.map((p) => (
-              <option key={p.nome} value={p.nome}>{p.nome}</option>
-            ))}
-          </select>
+        <div className="space-y-4 pb-2">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted">Plano</p>
+              <select value={planoNome} onChange={(e) => selecionarPlano(e.target.value)} className="h-12 w-full rounded-2xl border border-border bg-white px-4 text-text outline-none">
+                <option value="">Selecione o plano</option>
+                {planos.map((p) => (
+                  <option key={p.nome} value={p.nome}>{p.nome}</option>
+                ))}
+              </select>
+            </div>
 
-          <p className="text-xs font-medium uppercase tracking-wide text-muted">Professor</p>
-          <select
-            value={contratoProfessorId}
-            onChange={(e) => setContratoProfessorId(e.target.value)}
-            className="h-12 w-full rounded-2xl border border-border bg-white px-4 text-text outline-none"
-          >
-            <option value="">Selecione o professor</option>
-            {professores.map((p: any) => <option key={p.id} value={p.id}>{p.nome}</option>)}
-          </select>
-
-          <p className="text-xs font-medium uppercase tracking-wide text-muted">Valor</p>
-          <Input value={Number(valor || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} readOnly />
-
-          <p className="text-xs font-medium uppercase tracking-wide text-muted">Recorrencia</p>
-          <Input value={recorrencia.charAt(0).toUpperCase() + recorrencia.slice(1)} readOnly />
-
-          <p className="text-xs font-medium uppercase tracking-wide text-muted">Numero de aulas por semana</p>
-          <Input value={qtdAulas} readOnly />
-
-          <p className="text-xs font-medium uppercase tracking-wide text-muted">Data de inicio</p>
-          <Input type="date" value={dataInicio} onChange={(e) => setDataInicio(e.target.value)} />
-
-          <p className="text-xs font-medium uppercase tracking-wide text-muted">Data de encerramento</p>
-          <Input value={formatarDataBR(dataFimPreview)} readOnly />
-
-          <p className="text-xs font-medium uppercase tracking-wide text-muted">Dias da semana</p>
-          <div className="flex flex-wrap gap-2">
-            {["Seg", "Ter", "Qua", "Qui", "Sex", "Sab", "Dom"].map((d) => (
-              <button key={d} onClick={() => toggleDia(d)} className={`rounded-xl px-3 py-2 text-sm ${diasSemana.includes(d) ? "bg-primary text-white" : "border border-border bg-white text-text"}`}>
-                {d}
-              </button>
-            ))}
+            <div className="space-y-1">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted">Professor</p>
+              <select
+                value={contratoProfessorId}
+                onChange={(e) => setContratoProfessorId(e.target.value)}
+                className="h-12 w-full rounded-2xl border border-border bg-white px-4 text-text outline-none"
+              >
+                <option value="">Selecione o professor</option>
+                {professores.map((p: any) => <option key={p.id} value={p.id}>{p.nome}</option>)}
+              </select>
+            </div>
           </div>
-          <p className="text-xs text-muted">Selecionados: {diasSemana.length}/{qtdAulas}</p>
 
-          <p className="text-xs font-medium uppercase tracking-wide text-muted">Horario</p>
-          <select value={horaAula} onChange={(e) => setHoraAula(e.target.value)} className="h-12 w-full rounded-2xl border border-border bg-white px-4 text-text outline-none">
-            <option value="">Selecione o horario</option>
-            {horasCheias.map((h) => (
-              <option key={h} value={h}>{h}</option>
-            ))}
-          </select>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted">Valor</p>
+              <Input value={Number(valor || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} readOnly />
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted">Recorrencia</p>
+              <Input value={recorrencia ? (recorrencia.charAt(0).toUpperCase() + recorrencia.slice(1)) : ""} readOnly />
+            </div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted">Numero de aulas por semana</p>
+              <Input value={qtdAulas} readOnly />
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted">Horario</p>
+              <select value={horaAula} onChange={(e) => setHoraAula(e.target.value)} className="h-12 w-full rounded-2xl border border-border bg-white px-4 text-text outline-none">
+                <option value="">Selecione o horario</option>
+                {horasCheias.map((h) => (
+                  <option key={h} value={h}>{h}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted">Data de inicio</p>
+              <Input type="date" value={dataInicio} onChange={(e) => setDataInicio(e.target.value)} />
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted">Data de encerramento</p>
+              <Input value={formatarDataBR(dataFimPreview)} readOnly />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted">Dias da semana</p>
+            <div className="flex flex-wrap gap-2">
+              {["Seg", "Ter", "Qua", "Qui", "Sex", "Sab", "Dom"].map((d) => (
+                <button key={d} onClick={() => toggleDia(d)} className={`rounded-xl px-3 py-2 text-sm ${diasSemana.includes(d) ? "bg-primary text-white" : "border border-border bg-white text-text"}`}>
+                  {d}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-muted">Selecionados: {diasSemana.length}/{qtdAulas}</p>
+          </div>
 
           {msgContrato && <p className="text-sm text-danger">{msgContrato}</p>}
-          <Button className="w-full" onClick={criarContrato}>{editingContratoId ? "Salvar alteracoes do contrato" : "Salvar contrato e criar aulas"}</Button>
+
+          <div className="sticky bottom-0 -mx-5 bg-white/95 pt-3 pb-1 backdrop-blur">
+            <div className="px-5">
+              <Button className="w-full" onClick={criarContrato}>
+                {editingContratoId ? "Salvar alteracoes do contrato" : "Salvar contrato e criar aulas"}
+              </Button>
+            </div>
+          </div>
         </div>
       </Modal>
 
