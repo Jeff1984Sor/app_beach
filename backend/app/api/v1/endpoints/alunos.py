@@ -184,6 +184,38 @@ async def ensure_bloqueios_table(db: AsyncSession):
     await db.commit()
 
 
+async def ensure_aulas_desconto_columns(db: AsyncSession):
+    # Colunas auxiliares para estorno/desconto sem precisar de migration.
+    await db.execute(
+        text(
+            """
+            DO $$
+            BEGIN
+              IF NOT EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'aulas' AND column_name = 'descontada'
+              ) THEN
+                ALTER TABLE aulas ADD COLUMN descontada BOOLEAN NOT NULL DEFAULT FALSE;
+              END IF;
+              IF NOT EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'aulas' AND column_name = 'desconto_valor'
+              ) THEN
+                ALTER TABLE aulas ADD COLUMN desconto_valor NUMERIC(12,2);
+              END IF;
+              IF NOT EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'aulas' AND column_name = 'desconto_em'
+              ) THEN
+                ALTER TABLE aulas ADD COLUMN desconto_em TIMESTAMP;
+              END IF;
+            END $$;
+            """
+        )
+    )
+    await db.commit()
+
+
 async def slot_em_conflito(
     db: AsyncSession,
     professor_id: int,
@@ -937,6 +969,107 @@ async def deletar_aula_aluno(aluno_id: int, aula_id: int, db: AsyncSession = Dep
     return {"ok": True}
 
 
+@router.post("/{aluno_id}/aulas/{aula_id}/descontar")
+async def descontar_valor_aula(aluno_id: int, aula_id: int, db: AsyncSession = Depends(get_db)):
+    """
+    Estorna/desconta o valor de uma aula:
+    - Aula avulsa: usa aula.valor.
+    - Aula de contrato: calcula proporcional (contrato.valor / total_aulas_geradas_no_periodo).
+
+    Aplica o desconto abatendo do(s) contas a receber em aberto do aluno (mais antigos primeiro).
+    """
+    await ensure_finance_columns(db)
+    await ensure_contracts_table(db)
+    await ensure_aulas_desconto_columns(db)
+
+    aula = await db.scalar(select(Aula).where(Aula.id == aula_id, Aula.aluno_id == aluno_id))
+    if not aula:
+        raise HTTPException(status_code=404, detail="Aula nao encontrada")
+
+    # Evita desconto duplicado
+    if getattr(aula, "descontada", False):
+        raise HTTPException(status_code=409, detail="Aula ja foi descontada")
+
+    if (aula.status or "").lower() == "cancelada":
+        raise HTTPException(status_code=400, detail="Aula cancelada nao pode ser descontada")
+
+    desconto_valor = float(aula.valor or 0)
+
+    if aula.contrato_id:
+        # Proporcional por aula: contrato.valor / total de aulas geradas neste contrato.
+        contrato_row = (
+            await db.execute(
+                text("SELECT valor FROM aluno_contratos WHERE id = :id AND aluno_id = :aluno_id"),
+                {"id": int(aula.contrato_id), "aluno_id": aluno_id},
+            )
+        ).first()
+        if contrato_row and contrato_row[0] is not None:
+            total_aulas = (
+                await db.execute(
+                    text("SELECT COUNT(1) FROM aulas WHERE contrato_id = :cid AND aluno_id = :aluno_id"),
+                    {"cid": int(aula.contrato_id), "aluno_id": aluno_id},
+                )
+            ).scalar_one()
+            total_aulas = int(total_aulas or 0)
+            if total_aulas > 0:
+                desconto_valor = float(contrato_row[0] or 0) / float(total_aulas)
+
+    # Arredonda para dinheiro
+    desconto_valor = float(round(desconto_valor, 2))
+    if desconto_valor <= 0:
+        raise HTTPException(status_code=400, detail="Valor de desconto invalido")
+
+    # Abate do(s) contas a receber em aberto, do mais antigo para o mais recente.
+    restante = desconto_valor
+    rows = (
+        await db.execute(
+            text(
+                """
+                SELECT id, valor
+                FROM contas_receber
+                WHERE aluno_id = :aluno_id
+                  AND LOWER(COALESCE(status, 'aberto')) = 'aberto'
+                  AND COALESCE(valor, 0) > 0
+                ORDER BY vencimento ASC, id ASC
+                """
+            ),
+            {"aluno_id": aluno_id},
+        )
+    ).all()
+
+    for r in rows:
+        if restante <= 0:
+            break
+        conta_id = int(r[0])
+        valor_atual = float(r[1] or 0)
+        if valor_atual <= 0:
+            continue
+        novo_valor = valor_atual - restante
+        if novo_valor < 0:
+            novo_valor = 0.0
+        abatido = valor_atual - novo_valor
+        restante = round(restante - abatido, 2)
+        await db.execute(
+            text("UPDATE contas_receber SET valor = :v WHERE id = :id AND aluno_id = :aluno_id"),
+            {"v": float(novo_valor), "id": conta_id, "aluno_id": aluno_id},
+        )
+
+    # Marca aula como descontada
+    await db.execute(
+        text(
+            """
+            UPDATE aulas
+            SET descontada = TRUE, desconto_valor = :dv, desconto_em = NOW()
+            WHERE id = :id AND aluno_id = :aluno_id
+            """
+        ),
+        {"dv": desconto_valor, "id": aula_id, "aluno_id": aluno_id},
+    )
+
+    await db.commit()
+    return {"ok": True, "desconto_valor": desconto_valor, "restante_nao_abatido": float(restante)}
+
+
 @router.put("/{aluno_id}/aulas/{aula_id}/status")
 async def atualizar_status_aula(aluno_id: int, aula_id: int, payload: dict, db: AsyncSession = Depends(get_db)):
     """
@@ -947,9 +1080,10 @@ async def atualizar_status_aula(aluno_id: int, aula_id: int, payload: dict, db: 
     - falta_aviso
     - falta
     - agendada
+    - cancelada
     """
     status = (payload.get("status") or "").strip().lower()
-    allowed = {"realizada", "falta_aviso", "falta", "agendada"}
+    allowed = {"realizada", "falta_aviso", "falta", "agendada", "cancelada"}
     if status not in allowed:
         raise HTTPException(status_code=400, detail="Status invalido")
 

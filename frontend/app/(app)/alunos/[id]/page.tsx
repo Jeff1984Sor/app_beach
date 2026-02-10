@@ -104,6 +104,11 @@ export default function AlunoFichaPage() {
   const [dataPagamento, setDataPagamento] = useState(new Date().toISOString().slice(0, 10));
   const [contaBancariaId, setContaBancariaId] = useState("");
   const [openAulaAvulsa, setOpenAulaAvulsa] = useState(false);
+  const [openDesconto, setOpenDesconto] = useState(false);
+  const [descontoAulaId, setDescontoAulaId] = useState<number | null>(null);
+  const [descontoValor, setDescontoValor] = useState<number | null>(null);
+  const [descontoLoading, setDescontoLoading] = useState(false);
+  const [descontoMsg, setDescontoMsg] = useState<string | null>(null);
   const [avulsaData, setAvulsaData] = useState(new Date().toISOString().slice(0, 10));
   const [avulsaProfessorId, setAvulsaProfessorId] = useState("");
   const [avulsaHora, setAvulsaHora] = useState("");
@@ -392,6 +397,53 @@ export default function AlunoFichaPage() {
     }
   }
 
+  function abrirDesconto(aula: any) {
+    setDescontoAulaId(Number(aula?.id));
+    setDescontoValor(null);
+    setDescontoMsg(null);
+    setOpenDesconto(true);
+  }
+
+  async function confirmarDesconto() {
+    if (!params.id || !descontoAulaId) return;
+    setDescontoLoading(true);
+    setDescontoMsg(null);
+    try {
+      const res = await fetch(`${API_URL}/alunos/${params.id}/aulas/${descontoAulaId}/descontar`, {
+        method: "POST",
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setDescontoMsg(body?.detail || "Falha ao descontar.");
+        return;
+      }
+      const v = Number(body?.desconto_valor || 0);
+      setDescontoValor(v);
+      setDescontoMsg("Valor descontado com sucesso. Deseja cancelar a aula?");
+    } catch (e: any) {
+      setDescontoMsg(e?.name === "AbortError" ? "Tempo esgotado. Tente novamente." : "Falha de rede ao descontar. Tente novamente.");
+    } finally {
+      setDescontoLoading(false);
+      qc.invalidateQueries({ queryKey: ["aluno-ficha", params.id] });
+    }
+  }
+
+  async function cancelarAulaDescontada() {
+    if (!params.id || !descontoAulaId) return;
+    try {
+      const res = await fetch(`${API_URL}/alunos/${params.id}/aulas/${descontoAulaId}/status`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "cancelada" }),
+      });
+      if (!res.ok) return;
+      setOpenDesconto(false);
+    } finally {
+      qc.invalidateQueries({ queryKey: ["aluno-ficha", params.id] });
+      qc.invalidateQueries({ queryKey: ["home-kpis"] });
+    }
+  }
+
   async function deletarAula(aulaId: number) {
     if (!data) return;
     if (!window.confirm("Deseja realmente deletar esta aula?")) return;
@@ -661,6 +713,9 @@ export default function AlunoFichaPage() {
                       >
                         <MinusCircle size={16} className="mr-2 inline" /> Falta
                       </button>
+                      <button onClick={() => abrirDesconto(a)} className="rounded-xl border border-border px-3 py-2 text-sm text-text hover:bg-bg">
+                        <MinusCircle size={16} className="mr-2 inline text-danger" /> Descontar
+                      </button>
                       <button onClick={() => abrirReagendar(a)} className="rounded-xl border border-border px-3 py-2 text-sm text-text hover:bg-bg">
                         <Pencil size={16} className="mr-2 inline" /> Alterar
                       </button>
@@ -904,6 +959,53 @@ export default function AlunoFichaPage() {
           </select>
           {avulsaMsg && <p className="text-sm text-danger">{avulsaMsg}</p>}
           <Button className="w-full" onClick={salvarAulaAvulsa}>Salvar aula avulsa</Button>
+        </div>
+      </Modal>
+
+      <Modal open={openDesconto} onClose={() => (descontoLoading ? null : setOpenDesconto(false))} title="Descontar aula">
+        <div className="space-y-3">
+          <p className="text-sm text-muted">Iremos estornar o valor desta aula e abater do saldo em aberto do aluno.</p>
+
+          {descontoValor !== null && (
+            <div className="rounded-2xl bg-bg p-4 text-sm text-text">
+              Valor calculado:{" "}
+              <span className="font-semibold">
+                {Number(descontoValor || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+              </span>
+            </div>
+          )}
+
+          {descontoMsg && <p className="text-sm text-danger">{descontoMsg}</p>}
+
+          <div className="flex items-center gap-2 pt-1">
+            {descontoValor === null ? (
+              <button
+                type="button"
+                disabled={descontoLoading}
+                onClick={confirmarDesconto}
+                className="inline-flex h-12 flex-1 items-center justify-center rounded-2xl bg-primary text-sm font-semibold text-white shadow-soft disabled:opacity-60"
+              >
+                {descontoLoading ? "Descontando..." : "Descontar"}
+              </button>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={cancelarAulaDescontada}
+                  className="inline-flex h-12 flex-1 items-center justify-center rounded-2xl bg-danger text-sm font-semibold text-white shadow-soft"
+                >
+                  Sim, cancelar aula
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOpenDesconto(false)}
+                  className="inline-flex h-12 flex-1 items-center justify-center rounded-2xl border border-border bg-white text-sm font-semibold text-text"
+                >
+                  Nao
+                </button>
+              </>
+            )}
+          </div>
         </div>
       </Modal>
     </main>
