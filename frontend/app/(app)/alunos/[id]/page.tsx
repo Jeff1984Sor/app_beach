@@ -691,7 +691,7 @@ export default function AlunoFichaPage() {
                       </div>
                       <Badge tone={aulaStatusMeta(a.status).tone}>{aulaStatusMeta(a.status).label}</Badge>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
                       <button
                         title="Marcar como realizada"
                         onClick={() => marcarStatusAula(a.id, "realizada")}
@@ -712,6 +712,13 @@ export default function AlunoFichaPage() {
                         className="rounded-xl border border-border px-3 py-2 text-sm text-danger hover:bg-danger/10"
                       >
                         <MinusCircle size={16} className="mr-2 inline" /> Falta
+                      </button>
+                      <button
+                        title="Marcar como agendada"
+                        onClick={() => marcarStatusAula(a.id, "agendada")}
+                        className="rounded-xl border border-border px-3 py-2 text-sm text-text hover:bg-bg"
+                      >
+                        <CalendarPlus size={16} className="mr-2 inline" /> Agendada
                       </button>
                       <button onClick={() => abrirDesconto(a)} className="rounded-xl border border-border px-3 py-2 text-sm text-text hover:bg-bg">
                         <MinusCircle size={16} className="mr-2 inline text-danger" /> Descontar
