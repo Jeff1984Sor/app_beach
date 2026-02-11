@@ -202,6 +202,19 @@ export default function AgendaPage() {
     return all.filter((a) => a.professor_nome?.toLowerCase().includes(q) || a.unidade?.toLowerCase().includes(q) || a.aluno_nome?.toLowerCase().includes(q));
   }, [data, busca]);
 
+  const gruposAulas = useMemo(() => {
+    const map = new Map<string, AulaApi[]>();
+    for (const aula of cardsAulas) {
+      const key = `${aula.inicio}|${aula.fim}|${aula.professor_id}|${aula.unidade || ""}`;
+      const curr = map.get(key) || [];
+      curr.push(aula);
+      map.set(key, curr);
+    }
+    return Array.from(map.entries())
+      .map(([key, aulas]) => ({ key, aulas }))
+      .sort((a, b) => String(a.aulas[0]?.inicio || "").localeCompare(String(b.aulas[0]?.inicio || "")));
+  }, [cardsAulas]);
+
   async function marcarStatus(aula: AulaApi, status: "realizada" | "falta_aviso" | "falta" | "agendada" | "cancelada") {
     const alunoId = aula.aluno_id;
     if (!alunoId) return;
@@ -384,58 +397,70 @@ export default function AgendaPage() {
             <button className="rounded-xl border border-border px-3 py-1 text-sm text-danger" onClick={() => apagarBloqueio(b.id)}>Excluir</button>
           </Card>
         ))}
-        {!isLoading && cardsAulas.map((a) => (
-          <Card key={a.id} className="flex items-center justify-between gap-3 p-4">
-            <div className="min-w-0">
-              <p className="text-lg font-semibold text-primary">
-                {(a.data_br && a.hora_br) ? `${a.data_br} - ${a.hora_br}` : `${formatDateTimeBR(a.inicio).data} - ${formatDateTimeBR(a.inicio).hora}`}
-              </p>
-              <p className="truncate font-semibold text-text">{a.aluno_nome || "Aluno"}</p>
-              <p className="truncate text-sm text-muted">{a.professor_nome}</p>
-              <p className="truncate text-sm text-muted">{a.unidade}</p>
-            </div>
-            <div className="flex shrink-0 items-center gap-2">
-              <div className="hidden items-center gap-1 sm:flex">
-                <button
-                  title="Alterar aula"
-                  onClick={() => abrirEditar(a)}
-                  className="rounded-xl border border-border p-2 text-text hover:bg-bg"
-                >
-                  <Pencil size={16} />
-                </button>
-                <button
-                  title="Marcar como realizada"
-                  onClick={() => marcarStatus(a, "realizada")}
-                  className="rounded-xl border border-border p-2 text-success hover:bg-success/10"
-                >
-                  <CheckCircle2 size={16} />
-                </button>
-                <button
-                  title="Marcar falta avisada"
-                  onClick={() => marcarStatus(a, "falta_aviso")}
-                  className="rounded-xl border border-border p-2 text-primary hover:bg-primary/10"
-                >
-                  <PhoneCall size={16} />
-                </button>
-                <button
-                  title="Marcar falta"
-                  onClick={() => marcarStatus(a, "falta")}
-                  className="rounded-xl border border-border p-2 text-danger hover:bg-danger/10"
-                >
-                  <MinusCircle size={16} />
-                </button>
-                <button
-                  title="Marcar cancelada"
-                  onClick={() => marcarStatus(a, "cancelada")}
-                  className="rounded-xl border border-border p-2 text-danger hover:bg-danger/10"
-                >
-                  <XCircle size={16} />
-                </button>
+        {!isLoading && gruposAulas.map((g) => {
+          const base = g.aulas[0];
+          return (
+            <Card key={g.key} className="space-y-3 p-4">
+              <div className="min-w-0">
+                <p className="text-lg font-semibold text-primary">
+                  {(base?.data_br && base?.hora_br) ? `${base.data_br} - ${base.hora_br}` : `${formatDateTimeBR(base?.inicio || "").data} - ${formatDateTimeBR(base?.inicio || "").hora}`}
+                </p>
+                <p className="truncate text-sm font-semibold text-text">{base?.professor_nome || "Sem professor"} {base?.unidade ? `- ${base.unidade}` : ""}</p>
+                <p className="text-xs text-muted">{g.aulas.length} aluno(s) neste horario</p>
               </div>
-              <Badge tone={statusMeta(a.status).tone}>{statusMeta(a.status).label}</Badge>
-            </div>
-          </Card>
-        ))}
+
+              <div className="space-y-2">
+                {g.aulas.map((a) => (
+                  <div key={a.id} className="flex items-center justify-between gap-3 rounded-xl border border-border/70 p-3">
+                    <div className="min-w-0">
+                      <p className="truncate font-semibold text-text">{a.aluno_nome || "Aluno"}</p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <div className="hidden items-center gap-1 sm:flex">
+                        <button
+                          title="Alterar aula"
+                          onClick={() => abrirEditar(a)}
+                          className="rounded-xl border border-border p-2 text-text hover:bg-bg"
+                        >
+                          <Pencil size={16} />
+                        </button>
+                        <button
+                          title="Marcar como realizada"
+                          onClick={() => marcarStatus(a, "realizada")}
+                          className="rounded-xl border border-border p-2 text-success hover:bg-success/10"
+                        >
+                          <CheckCircle2 size={16} />
+                        </button>
+                        <button
+                          title="Marcar falta avisada"
+                          onClick={() => marcarStatus(a, "falta_aviso")}
+                          className="rounded-xl border border-border p-2 text-primary hover:bg-primary/10"
+                        >
+                          <PhoneCall size={16} />
+                        </button>
+                        <button
+                          title="Marcar falta"
+                          onClick={() => marcarStatus(a, "falta")}
+                          className="rounded-xl border border-border p-2 text-danger hover:bg-danger/10"
+                        >
+                          <MinusCircle size={16} />
+                        </button>
+                        <button
+                          title="Marcar cancelada"
+                          onClick={() => marcarStatus(a, "cancelada")}
+                          className="rounded-xl border border-border p-2 text-danger hover:bg-danger/10"
+                        >
+                          <XCircle size={16} />
+                        </button>
+                      </div>
+                      <Badge tone={statusMeta(a.status).tone}>{statusMeta(a.status).label}</Badge>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          );
+        })}
         {!isLoading && (data?.aulas?.length || 0) === 0 && (
           <Card className="p-5 text-sm text-muted">Nenhuma aula encontrada para o filtro atual.</Card>
         )}
