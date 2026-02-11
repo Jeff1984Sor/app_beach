@@ -405,7 +405,8 @@ export default function AgendaPage() {
                 <p className="text-lg font-semibold text-primary">
                   {(base?.data_br && base?.hora_br) ? `${base.data_br} - ${base.hora_br}` : `${formatDateTimeBR(base?.inicio || "").data} - ${formatDateTimeBR(base?.inicio || "").hora}`}
                 </p>
-                <p className="truncate text-sm font-semibold text-text">{base?.professor_nome || "Sem professor"} {base?.unidade ? `- ${base.unidade}` : ""}</p>
+                <p className="truncate text-sm font-semibold text-text">{base?.professor_nome || "Sem professor"}</p>
+                <p className="truncate text-xs text-muted">{base?.unidade ? `Unidade da aula: ${base.unidade}` : "Unidade da aula: nao informada"}</p>
                 <p className="text-xs text-muted">{g.aulas.length} aluno(s) neste horario</p>
               </div>
 

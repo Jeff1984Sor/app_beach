@@ -411,6 +411,39 @@ async def get_details(db: AsyncSession, aluno_id: int) -> dict:
     }
 
 
+async def resolve_unidade_aluno(db: AsyncSession, aluno_id: int, unidade_nome_payload: str | None = None) -> Unidade:
+    # Prioridade: unidade do payload -> unidade do cadastro do aluno -> primeira unidade cadastrada.
+    unidade = await db.scalar(select(Unidade).where(Unidade.nome == unidade_nome_payload)) if unidade_nome_payload else None
+    if unidade:
+        return unidade
+
+    detalhes = await get_details(db, aluno_id)
+    unidade_id = detalhes.get("unidade_id")
+    unidade_nome = detalhes.get("unidade")
+
+    if unidade_id is not None:
+        try:
+            unidade = await db.scalar(select(Unidade).where(Unidade.id == int(unidade_id)))
+        except Exception:
+            unidade = None
+        if unidade:
+            return unidade
+
+    if unidade_nome:
+        unidade = await db.scalar(select(Unidade).where(Unidade.nome == str(unidade_nome)))
+        if unidade:
+            return unidade
+
+    unidade = await db.scalar(select(Unidade).limit(1))
+    if unidade:
+        return unidade
+
+    unidade = Unidade(nome=unidade_nome_payload or unidade_nome or "Unidade Padrao", cep="00000000", endereco="Nao informado")
+    db.add(unidade)
+    await db.flush()
+    return unidade
+
+
 @router.get("")
 async def list_alunos(db: AsyncSession = Depends(get_db)):
     await ensure_details_table(db)
@@ -832,13 +865,7 @@ async def criar_reservas_contrato(aluno_id: int, contrato_id: int, payload: dict
     if not agenda_por_weekday:
         raise HTTPException(status_code=400, detail="Dias da semana invalidos")
 
-    unidade = await db.scalar(select(Unidade).where(Unidade.nome == unidade_nome)) if unidade_nome else None
-    if not unidade:
-        unidade = await db.scalar(select(Unidade).limit(1))
-    if not unidade:
-        unidade = Unidade(nome=unidade_nome or "Unidade Padrao", cep="00000000", endereco="Nao informado")
-        db.add(unidade)
-        await db.flush()
+    unidade = await resolve_unidade_aluno(db, aluno_id=aluno_id, unidade_nome_payload=unidade_nome)
 
     professor_id = payload.get("professor_id") or contrato[6]
     prof = None
@@ -995,13 +1022,7 @@ async def criar_aula_avulsa(aluno_id: int, payload: dict, db: AsyncSession = Dep
         raise HTTPException(status_code=404, detail="Professor nao encontrado")
 
     unidade_nome = payload.get("unidade")
-    unidade = await db.scalar(select(Unidade).where(Unidade.nome == unidade_nome)) if unidade_nome else None
-    if not unidade:
-        unidade = await db.scalar(select(Unidade).limit(1))
-    if not unidade:
-        unidade = Unidade(nome=unidade_nome or "Unidade Padrao", cep="00000000", endereco="Nao informado")
-        db.add(unidade)
-        await db.flush()
+    unidade = await resolve_unidade_aluno(db, aluno_id=aluno_id, unidade_nome_payload=unidade_nome)
 
     fim = ini + timedelta(minutes=max(30, duracao_min))
     conflito = await slot_em_conflito(db, prof.id, ini, fim, unidade_id=unidade.id)
