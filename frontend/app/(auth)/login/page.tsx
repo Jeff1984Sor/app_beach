@@ -43,8 +43,15 @@ export default function LoginPage() {
       });
 
       if (!loginRes.ok) {
-        const body = await loginRes.json().catch(() => ({}));
-        throw new Error(body.detail || "Credenciais invalidas");
+        const body = await loginRes.json().catch(() => ({} as Record<string, unknown>));
+        const detail = body?.detail;
+        const message =
+          typeof detail === "string"
+            ? detail
+            : Array.isArray(detail) && detail.length > 0 && typeof detail[0] === "object" && detail[0] !== null && "msg" in detail[0]
+              ? String((detail[0] as { msg?: unknown }).msg || "Credenciais invalidas")
+              : "Credenciais invalidas";
+        throw new Error(message);
       }
 
       const loginData = (await loginRes.json()) as LoginResponse;
