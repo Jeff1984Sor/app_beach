@@ -10,6 +10,7 @@ const items = [
   { href: "/home", label: "Home" },
   { href: "/alunos", label: "Alunos" },
   { href: "/agenda", label: "Agenda" },
+  { href: "/vendas", label: "Vendas" },
   { href: "/financeiro", label: "Financeiro" },
 ];
 
@@ -23,6 +24,7 @@ const tabelas = [
   { nome: "Modelo de Contrato", href: "/configuracoes?entidade=modelo_contrato" },
   { nome: "Movimentacoes Financeiras", href: "/configuracoes?entidade=movimentacoes_financeiras" },
   { nome: "Plano", href: "/configuracoes?entidade=plano" },
+  { nome: "Produtos", href: "/configuracoes?entidade=produtos" },
   { nome: "Regras Comissao", href: "/configuracoes?entidade=regras_comissao" },
   { nome: "Subcategoria", href: "/configuracoes?entidade=subcategoria" },
   { nome: "Unidades", href: "/configuracoes?entidade=unidades" },

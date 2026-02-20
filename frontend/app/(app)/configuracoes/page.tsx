@@ -24,6 +24,7 @@ type Entidade =
   | "categoria"
   | "subcategoria"
   | "modelo_contrato"
+  | "produtos"
   ;
 
 type Item = {
@@ -119,6 +120,11 @@ type RegraComissaoApi = {
   percentual: number;
   valor_por_aula: number;
 };
+type ProdutoApi = {
+  id: number;
+  nome: string;
+  status: "ativo" | "inativo";
+};
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
 
@@ -136,6 +142,7 @@ const LABELS: Record<Entidade, string> = {
   categoria: "Categoria",
   subcategoria: "Subcategoria",
   modelo_contrato: "Modelo de Contrato",
+  produtos: "Produtos",
 };
 
 export default function ConfiguracoesPage() {
@@ -156,6 +163,7 @@ export default function ConfiguracoesPage() {
     "categoria",
     "subcategoria",
     "modelo_contrato",
+    "produtos",
   ];
   const entidade = (entidadeParam && entidadesValidas.includes(entidadeParam as Entidade) ? entidadeParam : "categoria") as Entidade;
 
@@ -327,6 +335,15 @@ CONTRATADA: ______________________`);
     },
     enabled: entidade === "regras_comissao",
   });
+  const { data: produtosApi = [] } = useQuery<ProdutoApi[]>({
+    queryKey: ["produtos-config"],
+    queryFn: async () => {
+      const res = await fetch(`${API_URL}/produtos`, { cache: "no-store" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: entidade === "produtos",
+  });
 
   const items = useMemo(() => {
     if (entidade === "unidades") {
@@ -408,6 +425,14 @@ CONTRATADA: ______________________`);
         status: "ativo" as const,
       }));
     }
+    if (entidade === "produtos") {
+      return produtosApi.map((p) => ({
+        id: p.id,
+        titulo: p.nome,
+        detalhe: "Produto para vendas",
+        status: p.status,
+      }));
+    }
 
     // Entidades sem backend ainda: sem dados falsos.
     return [];
@@ -423,6 +448,7 @@ CONTRATADA: ______________________`);
     contasReceberFiltroStatus,
     contasPagarApi,
     regrasComissaoApi,
+    produtosApi,
   ]);
   const categoriasAtivas = useMemo(
     () => categoriasApi.filter((x) => x.status === "ativo").map((x) => x.nome),
@@ -598,6 +624,17 @@ CONTRATADA: ______________________`);
       }
       return;
     }
+    if (entidade === "produtos") {
+      const payload = { nome: titulo, status };
+      const url = editId ? `${API_URL}/produtos/${editId}` : `${API_URL}/produtos`;
+      const method = editId ? "PUT" : "POST";
+      const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      if (res.ok) {
+        qc.invalidateQueries({ queryKey: ["produtos-config"] });
+        setOpen(false);
+      }
+      return;
+    }
     if (entidade === "conta_bancaria") {
       const payload = {
         nome_conta: titulo,
@@ -734,6 +771,11 @@ CONTRATADA: ______________________`);
     if (entidade === "regras_comissao") {
       const res = await fetch(`${API_URL}/regras-comissao/${id}`, { method: "DELETE" });
       if (res.ok) qc.invalidateQueries({ queryKey: ["regras-comissao-config"] });
+      return;
+    }
+    if (entidade === "produtos") {
+      const res = await fetch(`${API_URL}/produtos/${id}`, { method: "DELETE" });
+      if (res.ok) qc.invalidateQueries({ queryKey: ["produtos-config"] });
       return;
     }
     if (entidade === "movimentacoes_financeiras") return;

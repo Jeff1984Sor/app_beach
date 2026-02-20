@@ -138,6 +138,36 @@ async def ensure_finance_columns(db: AsyncSession):
               ) THEN
                 ALTER TABLE contas_receber ADD COLUMN conta_bancaria_id INTEGER;
               END IF;
+              IF EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'contas_receber' AND column_name = 'aluno_id' AND is_nullable = 'NO'
+              ) THEN
+                ALTER TABLE contas_receber ALTER COLUMN aluno_id DROP NOT NULL;
+              END IF;
+              IF NOT EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'contas_receber' AND column_name = 'cliente_nome'
+              ) THEN
+                ALTER TABLE contas_receber ADD COLUMN cliente_nome VARCHAR(120);
+              END IF;
+              IF NOT EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'contas_receber' AND column_name = 'descricao'
+              ) THEN
+                ALTER TABLE contas_receber ADD COLUMN descricao VARCHAR(255);
+              END IF;
+              IF NOT EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'contas_receber' AND column_name = 'categoria'
+              ) THEN
+                ALTER TABLE contas_receber ADD COLUMN categoria VARCHAR(120);
+              END IF;
+              IF NOT EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'contas_receber' AND column_name = 'subcategoria'
+              ) THEN
+                ALTER TABLE contas_receber ADD COLUMN subcategoria VARCHAR(120);
+              END IF;
               IF NOT EXISTS (
                 SELECT 1 FROM information_schema.columns
                 WHERE table_name = 'movimentos_bancarios' AND column_name = 'categoria'

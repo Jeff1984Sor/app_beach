@@ -26,6 +26,36 @@ async def ensure_finance_columns(db: AsyncSession):
               ) THEN
                 ALTER TABLE contas_receber ADD COLUMN conta_bancaria_id INTEGER;
               END IF;
+              IF EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'contas_receber' AND column_name = 'aluno_id' AND is_nullable = 'NO'
+              ) THEN
+                ALTER TABLE contas_receber ALTER COLUMN aluno_id DROP NOT NULL;
+              END IF;
+              IF NOT EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'contas_receber' AND column_name = 'cliente_nome'
+              ) THEN
+                ALTER TABLE contas_receber ADD COLUMN cliente_nome VARCHAR(120);
+              END IF;
+              IF NOT EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'contas_receber' AND column_name = 'descricao'
+              ) THEN
+                ALTER TABLE contas_receber ADD COLUMN descricao VARCHAR(255);
+              END IF;
+              IF NOT EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'contas_receber' AND column_name = 'categoria'
+              ) THEN
+                ALTER TABLE contas_receber ADD COLUMN categoria VARCHAR(120);
+              END IF;
+              IF NOT EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'contas_receber' AND column_name = 'subcategoria'
+              ) THEN
+                ALTER TABLE contas_receber ADD COLUMN subcategoria VARCHAR(120);
+              END IF;
             END $$;
             """
         )
@@ -52,16 +82,19 @@ async def listar_contas_receber(
                 SELECT
                   cr.id,
                   cr.aluno_id,
-                  u.nome AS aluno_nome,
+                  COALESCE(u.nome, cr.cliente_nome, 'Sem cliente') AS aluno_nome,
                   cr.contrato_id,
                   COALESCE(c.plano_nome, '') AS plano_nome,
                   cr.valor,
                   cr.vencimento,
                   COALESCE(cr.status, 'aberto') AS status,
-                  cr.data_pagamento
+                  cr.data_pagamento,
+                  COALESCE(cr.categoria, '') AS categoria,
+                  COALESCE(cr.subcategoria, '') AS subcategoria,
+                  COALESCE(cr.descricao, '') AS descricao
                 FROM contas_receber cr
-                JOIN alunos a ON a.id = cr.aluno_id
-                JOIN usuarios u ON u.id = a.usuario_id
+                LEFT JOIN alunos a ON a.id = cr.aluno_id
+                LEFT JOIN usuarios u ON u.id = a.usuario_id
                 LEFT JOIN aluno_contratos c ON c.id = cr.contrato_id
                 WHERE 1=1
                 {where_status}
@@ -83,6 +116,9 @@ async def listar_contas_receber(
             "vencimento": r[6].strftime("%d/%m/%Y") if r[6] else "--",
             "status": r[7],
             "data_pagamento": r[8].strftime("%d/%m/%Y") if r[8] else None,
+            "categoria": r[9],
+            "subcategoria": r[10],
+            "descricao": r[11],
         }
         for r in rows
     ]
@@ -103,9 +139,10 @@ async def pagar_conta_receber(conta_id: int, payload: dict, db: AsyncSession = D
             text(
                 """
                 SELECT cr.id, cr.valor, cr.contrato_id, cr.aluno_id, u.nome
+                     , cr.cliente_nome, cr.descricao, cr.categoria, cr.subcategoria
                 FROM contas_receber cr
-                JOIN alunos a ON a.id = cr.aluno_id
-                JOIN usuarios u ON u.id = a.usuario_id
+                LEFT JOIN alunos a ON a.id = cr.aluno_id
+                LEFT JOIN usuarios u ON u.id = a.usuario_id
                 WHERE cr.id = :id
                 """
             ),
@@ -116,8 +153,8 @@ async def pagar_conta_receber(conta_id: int, payload: dict, db: AsyncSession = D
         return {"ok": False, "detail": "Conta a receber nao encontrada"}
 
     plano_nome = "Sem plano"
-    categoria = None
-    subcategoria = None
+    categoria = row[7] if len(row) > 7 and row[7] else None
+    subcategoria = row[8] if len(row) > 8 and row[8] else None
     if row[2]:
         c = (await db.execute(text("SELECT plano_nome FROM aluno_contratos WHERE id = :id"), {"id": row[2]})).first()
         if c and c[0]:
@@ -131,6 +168,9 @@ async def pagar_conta_receber(conta_id: int, payload: dict, db: AsyncSession = D
             if p:
                 categoria = p[0]
                 subcategoria = p[1]
+
+    comprador_nome = row[4] or row[5] or "Cliente"
+    descricao_mov = row[6] or f"{comprador_nome} + {plano_nome}"
 
     await db.execute(
         text(
@@ -159,7 +199,7 @@ async def pagar_conta_receber(conta_id: int, payload: dict, db: AsyncSession = D
         {
             "data_movimento": data_pagamento,
             "valor": float(row[1] or 0),
-            "descricao": f"{row[4]} + {plano_nome}",
+            "descricao": descricao_mov,
             "categoria": categoria,
             "subcategoria": subcategoria,
         },

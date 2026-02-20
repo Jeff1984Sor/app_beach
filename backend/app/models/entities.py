@@ -69,10 +69,14 @@ class ContaReceber(Base, TimestampMixin):
     __tablename__ = "contas_receber"
     id: Mapped[int] = mapped_column(primary_key=True)
     contrato_id: Mapped[int | None] = mapped_column(nullable=True)
-    aluno_id: Mapped[int] = mapped_column(ForeignKey("alunos.id"))
+    aluno_id: Mapped[int | None] = mapped_column(ForeignKey("alunos.id"), nullable=True)
+    cliente_nome: Mapped[str | None] = mapped_column(String(120), nullable=True)
     vencimento: Mapped[date] = mapped_column(Date)
     valor: Mapped[float] = mapped_column(Numeric(10, 2))
     status: Mapped[str] = mapped_column(String(20), default="aberto")
+    descricao: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    categoria: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    subcategoria: Mapped[str | None] = mapped_column(String(120), nullable=True)
     data_pagamento: Mapped[date | None] = mapped_column(Date, nullable=True)
     conta_bancaria_id: Mapped[int | None] = mapped_column(nullable=True)
 

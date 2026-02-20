@@ -14,6 +14,8 @@ from app.api.v1.endpoints.contas_pagar import router as contas_pagar_router
 from app.api.v1.endpoints.regras_comissao import router as regras_comissao_router
 from app.api.v1.endpoints.comissoes import router as comissoes_router
 from app.api.v1.endpoints.home import router as home_router
+from app.api.v1.endpoints.produtos import router as produtos_router
+from app.api.v1.endpoints.vendas import router as vendas_router
 
 router = APIRouter(prefix="/api/v1")
 router.include_router(auth_router)
@@ -31,3 +33,5 @@ router.include_router(contas_pagar_router)
 router.include_router(regras_comissao_router)
 router.include_router(comissoes_router)
 router.include_router(home_router)
+router.include_router(produtos_router)
+router.include_router(vendas_router)
