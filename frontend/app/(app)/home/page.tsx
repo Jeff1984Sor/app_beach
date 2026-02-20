@@ -14,6 +14,7 @@ type AgendaAula = {
   id: number;
   inicio: string;
   status: string;
+  aluno_nome?: string;
   professor_nome: string;
   aluno_id?: number;
   unidade?: string;
@@ -285,7 +286,9 @@ export default function HomePage() {
                 aulasHoje.map((a) => (
                   <div key={a.id} className="flex items-center justify-between rounded-2xl border border-border bg-white p-4">
                     <div className="min-w-0">
-                      <p className="text-sm font-semibold text-text">{a.data_br || todayIso()} • {a.hora_br || "--:--"}</p>
+                      <p className="text-sm font-semibold text-text">
+                        {a.aluno_nome || `${a.data_br || todayIso()} • ${a.hora_br || "--:--"}`}
+                      </p>
                       <p className="truncate text-sm text-muted">{a.professor_nome} {a.unidade ? `• ${a.unidade}` : ""}</p>
                     </div>
                     <div className="flex items-center gap-2">
