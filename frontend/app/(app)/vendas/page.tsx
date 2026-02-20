@@ -106,10 +106,14 @@ export default function VendasPage() {
     () => (produtosQ.data || []).filter((p) => String(p.status || "").toLowerCase() === "ativo"),
     [produtosQ.data]
   );
+  function formatarNumeroComoMoeda(valor: number) {
+    return Number(valor || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  }
+
   useEffect(() => {
     const p = produtosAtivos.find((x) => String(x.id) === String(produtoId));
     if (p && Number(p.valor_venda || 0) > 0) {
-      setValorUnitario(formatarMoedaInput(String(p.valor_venda)));
+      setValorUnitario(formatarNumeroComoMoeda(Number(p.valor_venda || 0)));
     }
   }, [produtoId, produtosAtivos]);
   const totalPeriodo = useMemo(

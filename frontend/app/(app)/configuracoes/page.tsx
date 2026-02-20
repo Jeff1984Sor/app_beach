@@ -250,6 +250,19 @@ Assinaturas:
 CONTRATANTE: ______________________
 CONTRATADA: ______________________`);
 
+  function formatarMoedaInput(raw: string) {
+    const digits = String(raw || "").replace(/\D/g, "");
+    const cents = Number(digits || "0");
+    const valor = cents / 100;
+    return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  }
+
+  function parseMoedaInput(raw: string) {
+    const clean = String(raw || "").replace(/[^\d,.-]/g, "").replace(/\./g, "").replace(",", ".");
+    const n = Number(clean);
+    return Number.isFinite(n) ? n : 0;
+  }
+
   const { data: planosApi = [] } = useQuery<PlanoApi[]>({
     queryKey: ["planos-config"],
     queryFn: async () => {
@@ -580,8 +593,8 @@ CONTRATADA: ______________________`);
     if (entidade === "produtos") {
       const p = produtosApi.find((x) => x.id === item.id);
       if (p) {
-        setProdutoValorCusto(String(p.valor_custo || 0));
-        setProdutoValorVenda(String(p.valor_venda || 0));
+        setProdutoValorCusto(Number(p.valor_custo || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }));
+        setProdutoValorVenda(Number(p.valor_venda || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }));
       }
     }
     setOpen(true);
@@ -641,8 +654,8 @@ CONTRATADA: ______________________`);
     if (entidade === "produtos") {
       const payload = {
         nome: titulo,
-        valor_custo: Number(String(produtoValorCusto || "0").replace(",", ".")),
-        valor_venda: Number(String(produtoValorVenda || "0").replace(",", ".")),
+        valor_custo: parseMoedaInput(produtoValorCusto),
+        valor_venda: parseMoedaInput(produtoValorVenda),
         status,
       };
       const url = editId ? `${API_URL}/produtos/${editId}` : `${API_URL}/produtos`;
@@ -1165,18 +1178,18 @@ CONTRATADA: ______________________`);
                   <>
                     <div className="space-y-1">
                       <p className="text-xs font-medium uppercase tracking-wide text-muted">Valor de custo</p>
-                      <Input value={produtoValorCusto} onChange={(e) => setProdutoValorCusto(e.target.value)} placeholder="Ex: 30,00" />
+                      <Input value={produtoValorCusto} onChange={(e) => setProdutoValorCusto(formatarMoedaInput(e.target.value))} placeholder="R$ 0,00" />
                     </div>
                     <div className="space-y-1">
                       <p className="text-xs font-medium uppercase tracking-wide text-muted">Valor de venda</p>
-                      <Input value={produtoValorVenda} onChange={(e) => setProdutoValorVenda(e.target.value)} placeholder="Ex: 50,00" />
+                      <Input value={produtoValorVenda} onChange={(e) => setProdutoValorVenda(formatarMoedaInput(e.target.value))} placeholder="R$ 0,00" />
                     </div>
                     <div className="rounded-2xl border border-border bg-bg px-4 py-3 text-sm text-text">
                       Lucro:{" "}
                       <span className="font-semibold">
                         {(
-                          Number(String(produtoValorVenda || "0").replace(",", ".")) -
-                          Number(String(produtoValorCusto || "0").replace(",", "."))
+                          parseMoedaInput(produtoValorVenda) -
+                          parseMoedaInput(produtoValorCusto)
                         ).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
                       </span>
                     </div>
