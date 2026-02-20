@@ -25,6 +25,37 @@ async def ensure_contas_bancarias_table(db: AsyncSession):
     await db.commit()
 
 
+async def ensure_movimentos_columns(db: AsyncSession):
+    await db.execute(
+        text(
+            """
+            DO $$
+            BEGIN
+              IF NOT EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'movimentos_bancarios' AND column_name = 'categoria'
+              ) THEN
+                ALTER TABLE movimentos_bancarios ADD COLUMN categoria VARCHAR(120);
+              END IF;
+              IF NOT EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'movimentos_bancarios' AND column_name = 'subcategoria'
+              ) THEN
+                ALTER TABLE movimentos_bancarios ADD COLUMN subcategoria VARCHAR(120);
+              END IF;
+              IF NOT EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'movimentos_bancarios' AND column_name = 'conta_bancaria_id'
+              ) THEN
+                ALTER TABLE movimentos_bancarios ADD COLUMN conta_bancaria_id INTEGER;
+              END IF;
+            END $$;
+            """
+        )
+    )
+    await db.commit()
+
+
 @router.get("/contas-bancarias")
 async def listar_contas_bancarias(db: AsyncSession = Depends(get_db)):
     await ensure_contas_bancarias_table(db)
@@ -101,13 +132,17 @@ async def excluir_conta_bancaria(conta_id: int, db: AsyncSession = Depends(get_d
 
 @router.get("/movimentacoes-financeiras")
 async def listar_movimentacoes_financeiras(db: AsyncSession = Depends(get_db)):
+    await ensure_movimentos_columns(db)
+    await ensure_contas_bancarias_table(db)
     rows = (
         await db.execute(
             text(
                 """
                 SELECT id, data_movimento, tipo, valor, descricao
-                     , categoria, subcategoria
+                     , categoria, subcategoria, conta_bancaria_id
+                     , COALESCE(cb.nome_conta, '') AS conta_nome
                 FROM movimentos_bancarios
+                LEFT JOIN contas_bancarias cb ON cb.id = movimentos_bancarios.conta_bancaria_id
                 ORDER BY data_movimento DESC, id DESC
                 LIMIT 300
                 """
@@ -118,11 +153,14 @@ async def listar_movimentacoes_financeiras(db: AsyncSession = Depends(get_db)):
         {
             "id": r[0],
             "data_movimento": r[1].strftime("%d/%m/%Y") if r[1] else "--",
+            "data_iso": r[1].strftime("%Y-%m-%d") if r[1] else None,
             "tipo": r[2],
             "valor": float(r[3] or 0),
             "descricao": r[4] or "",
             "categoria": r[5] or "",
             "subcategoria": r[6] or "",
+            "conta_bancaria_id": r[7],
+            "conta_nome": r[8] or "",
         }
         for r in rows
     ]

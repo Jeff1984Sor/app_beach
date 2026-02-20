@@ -364,15 +364,148 @@ async def pagar_venda(venda_id: int, payload: dict, db: AsyncSession = Depends(g
     await db.execute(
         text(
             """
-            INSERT INTO movimentos_bancarios (data_movimento, tipo, valor, descricao, categoria, subcategoria, created_at, updated_at)
-            VALUES (:data_movimento, 'entrada', :valor, :descricao, 'Receita', 'Venda de Produtos', NOW(), NOW())
+            INSERT INTO movimentos_bancarios (data_movimento, tipo, valor, descricao, categoria, subcategoria, conta_bancaria_id, created_at, updated_at)
+            VALUES (:data_movimento, 'entrada', :valor, :descricao, 'Receita', 'Venda de Produtos', :conta_bancaria_id, NOW(), NOW())
             """
         ),
         {
             "data_movimento": data_pagamento,
             "valor": float(row[4] or 0),
             "descricao": f"{row[2]} + Venda de Produtos ({row[3]})",
+            "conta_bancaria_id": conta_bancaria_id,
         },
     )
+    await db.commit()
+    return {"ok": True}
+
+
+@router.put("/{venda_id}")
+async def editar_venda(venda_id: int, payload: dict, db: AsyncSession = Depends(get_db)):
+    await ensure_contas_receber_columns(db)
+    await ensure_vendas_table(db)
+    row = (
+        await db.execute(
+            text(
+                """
+                SELECT v.id, v.quantidade, v.valor_unitario, v.valor_total, v.data_venda, v.conta_receber_id, v.produto_nome, v.comprador_nome,
+                       COALESCE(cr.status, 'aberto') AS status_atual, cr.conta_bancaria_id
+                FROM vendas_produtos v
+                LEFT JOIN contas_receber cr ON cr.id = v.conta_receber_id
+                WHERE v.id = :id
+                """
+            ),
+            {"id": venda_id},
+        )
+    ).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Venda nao encontrada")
+
+    quantidade = int(payload.get("quantidade") or row[1] or 0)
+    valor_unitario = float(payload.get("valor_unitario") or row[2] or 0)
+    status_novo = (payload.get("status") or row[8] or "aberto").strip().lower()
+    data_venda_txt = payload.get("data_venda") or (row[4].strftime("%Y-%m-%d") if row[4] else date.today().strftime("%Y-%m-%d"))
+    data_pagamento_txt = payload.get("data_pagamento") or date.today().strftime("%Y-%m-%d")
+    conta_bancaria_id_novo = payload.get("conta_bancaria_id")
+    conta_bancaria_id_atual = row[9]
+    conta_bancaria_id_usar = conta_bancaria_id_novo if conta_bancaria_id_novo is not None else conta_bancaria_id_atual
+
+    if quantidade <= 0:
+        raise HTTPException(status_code=400, detail="Quantidade deve ser maior que zero")
+    if valor_unitario <= 0:
+        raise HTTPException(status_code=400, detail="Valor unitario deve ser maior que zero")
+    if status_novo not in {"aberto", "pago"}:
+        raise HTTPException(status_code=400, detail="Status invalido")
+
+    try:
+        data_venda = datetime.strptime(data_venda_txt, "%Y-%m-%d").date()
+        data_pagamento = datetime.strptime(data_pagamento_txt, "%Y-%m-%d").date()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Data invalida")
+
+    total_novo = round(float(quantidade) * float(valor_unitario), 2)
+    descricao = f"{row[7]} + Venda de Produtos ({row[6]})"
+    status_atual = str(row[8] or "aberto").lower()
+
+    await db.execute(
+        text(
+            """
+            UPDATE vendas_produtos
+            SET quantidade = :qtd, valor_unitario = :vu, valor_total = :vt, data_venda = :dv
+            WHERE id = :id
+            """
+        ),
+        {"qtd": quantidade, "vu": valor_unitario, "vt": total_novo, "dv": data_venda, "id": venda_id},
+    )
+
+    # Reverte financeiro se estava pago e voltou para aberto.
+    if status_atual == "pago" and status_novo == "aberto":
+        if conta_bancaria_id_atual:
+            await db.execute(
+                text("UPDATE contas_bancarias SET saldo = COALESCE(saldo, 0) - :valor WHERE id = :id"),
+                {"valor": float(row[3] or 0), "id": int(conta_bancaria_id_atual)},
+            )
+        await db.execute(
+            text(
+                """
+                INSERT INTO movimentos_bancarios (data_movimento, tipo, valor, descricao, categoria, subcategoria, conta_bancaria_id, created_at, updated_at)
+                VALUES (:data_movimento, 'saida', :valor, :descricao, 'Receita', 'Venda de Produtos', :conta_bancaria_id, NOW(), NOW())
+                """
+            ),
+            {
+                "data_movimento": date.today(),
+                "valor": float(row[3] or 0),
+                "descricao": f"Estorno: {descricao}",
+                "conta_bancaria_id": conta_bancaria_id_atual,
+            },
+        )
+
+    await db.execute(
+        text(
+            """
+            UPDATE contas_receber
+            SET vencimento = :vencimento,
+                valor = :valor,
+                status = :status,
+                data_pagamento = CASE WHEN :status = 'pago' THEN :data_pagamento ELSE NULL END,
+                conta_bancaria_id = CASE WHEN :status = 'pago' THEN :conta_bancaria_id ELSE NULL END,
+                descricao = :descricao,
+                categoria = 'Receita',
+                subcategoria = 'Venda de Produtos'
+            WHERE id = :id
+            """
+        ),
+        {
+            "vencimento": data_venda,
+            "valor": total_novo,
+            "status": status_novo,
+            "data_pagamento": data_pagamento,
+            "conta_bancaria_id": conta_bancaria_id_usar,
+            "descricao": descricao,
+            "id": int(row[5]),
+        },
+    )
+
+    # Se mudou de aberto para pago, aplica financeiro agora.
+    if status_atual != "pago" and status_novo == "pago":
+        if conta_bancaria_id_usar:
+            await db.execute(
+                text("UPDATE contas_bancarias SET saldo = COALESCE(saldo, 0) + :valor WHERE id = :id"),
+                {"valor": total_novo, "id": int(conta_bancaria_id_usar)},
+            )
+        await db.execute(
+            text(
+                """
+                INSERT INTO movimentos_bancarios (data_movimento, tipo, valor, descricao, categoria, subcategoria, conta_bancaria_id, created_at, updated_at)
+                VALUES (:data_movimento, 'entrada', :valor, :descricao, 'Receita', 'Venda de Produtos', :conta_bancaria_id, NOW(), NOW())
+                """
+            ),
+            {
+                "data_movimento": data_pagamento,
+                "valor": total_novo,
+                "descricao": descricao,
+                "conta_bancaria_id": conta_bancaria_id_usar,
+            },
+        )
+
     await db.commit()
     return {"ok": True}

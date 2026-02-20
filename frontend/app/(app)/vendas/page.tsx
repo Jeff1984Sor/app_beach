@@ -22,6 +22,7 @@ type Venda = {
   valor_total: number;
   data_venda: string;
   status: string;
+  conta_receber_id?: number;
 };
 
 function toBRL(v: number) {
@@ -59,6 +60,14 @@ export default function VendasPage() {
   const [payVendaId, setPayVendaId] = useState<number | null>(null);
   const [payData, setPayData] = useState(todayIso());
   const [payContaId, setPayContaId] = useState("");
+  const [editOpen, setEditOpen] = useState(false);
+  const [editVendaId, setEditVendaId] = useState<number | null>(null);
+  const [editQuantidade, setEditQuantidade] = useState("1");
+  const [editValor, setEditValor] = useState("");
+  const [editDataVenda, setEditDataVenda] = useState(todayIso());
+  const [editStatus, setEditStatus] = useState<"aberto" | "pago">("aberto");
+  const [editDataPagamento, setEditDataPagamento] = useState(todayIso());
+  const [editContaId, setEditContaId] = useState("");
 
   const vendasQ = useQuery<Venda[]>({
     queryKey: ["vendas", periodo, dataInicio, dataFim],
@@ -205,6 +214,42 @@ export default function VendasPage() {
     }
   }
 
+  function abrirEditar(v: Venda) {
+    setEditVendaId(v.id);
+    setEditQuantidade(String(v.quantidade || 1));
+    setEditValor(formatarNumeroComoMoeda(Number(v.valor_unitario || 0)));
+    setEditDataVenda(v.data_venda || todayIso());
+    setEditStatus(String(v.status || "aberto").toLowerCase() === "pago" ? "pago" : "aberto");
+    setEditDataPagamento(todayIso());
+    setEditContaId("");
+    setEditOpen(true);
+  }
+
+  async function salvarEdicao() {
+    if (!editVendaId) return;
+    const payload: any = {
+      quantidade: Number(editQuantidade || 0),
+      valor_unitario: parseMoedaInput(editValor),
+      data_venda: editDataVenda,
+      status: editStatus,
+      data_pagamento: editDataPagamento,
+      conta_bancaria_id: editStatus === "pago" && editContaId ? Number(editContaId) : null,
+    };
+    const res = await fetch(`${API_URL}/vendas/${editVendaId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (res.ok) {
+      setEditOpen(false);
+      setEditVendaId(null);
+      qc.invalidateQueries({ queryKey: ["vendas"] });
+      qc.invalidateQueries({ queryKey: ["contas-receber-config"] });
+      qc.invalidateQueries({ queryKey: ["contas-bancarias-config"] });
+      qc.invalidateQueries({ queryKey: ["movimentacoes-financeiras-config"] });
+    }
+  }
+
   return (
     <main className="space-y-4">
       <Section title="Vendas" subtitle="Controle de venda de produtos e recebimentos">
@@ -276,6 +321,9 @@ export default function VendasPage() {
               </div>
               <div className="text-right">
                 <p className="font-semibold text-text">{toBRL(v.valor_total)}</p>
+                <button onClick={() => abrirEditar(v)} className="mt-2 mr-2 rounded-xl border border-border px-3 py-2 text-xs text-text">
+                  Editar
+                </button>
                 {String(v.status || "").toLowerCase() !== "pago" ? (
                   <button
                     onClick={() => {
@@ -308,6 +356,29 @@ export default function VendasPage() {
             ))}
           </select>
           <Button onClick={confirmarPagamento}>Confirmar</Button>
+        </div>
+      </Modal>
+      <Modal open={editOpen} title="Editar lancamento" onClose={() => setEditOpen(false)}>
+        <div className="space-y-3">
+          <Input value={editQuantidade} onChange={(e) => setEditQuantidade(e.target.value)} placeholder="Quantidade" />
+          <Input value={editValor} onChange={(e) => setEditValor(formatarMoedaInput(e.target.value))} placeholder="R$ 0,00" />
+          <Input type="date" value={editDataVenda} onChange={(e) => setEditDataVenda(e.target.value)} />
+          <select value={editStatus} onChange={(e) => setEditStatus(e.target.value as "aberto" | "pago")} className="h-12 w-full rounded-2xl border border-border bg-white px-4 text-text outline-none">
+            <option value="aberto">Aberto</option>
+            <option value="pago">Pago</option>
+          </select>
+          {editStatus === "pago" && (
+            <>
+              <Input type="date" value={editDataPagamento} onChange={(e) => setEditDataPagamento(e.target.value)} />
+              <select value={editContaId} onChange={(e) => setEditContaId(e.target.value)} className="h-12 w-full rounded-2xl border border-border bg-white px-4 text-text outline-none">
+                <option value="">Conta bancaria (opcional)</option>
+                {(contasQ.data || []).map((c) => (
+                  <option key={c.id} value={c.id}>{c.nome_conta} - {c.banco}</option>
+                ))}
+              </select>
+            </>
+          )}
+          <Button onClick={salvarEdicao}>Salvar alteracoes</Button>
         </div>
       </Modal>
     </main>

@@ -104,6 +104,7 @@ class MovimentoBancario(Base, TimestampMixin):
     descricao: Mapped[str | None] = mapped_column(String(255), nullable=True)
     categoria: Mapped[str | None] = mapped_column(String(120), nullable=True)
     subcategoria: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    conta_bancaria_id: Mapped[int | None] = mapped_column(nullable=True)
 
 
 class RegraComissao(Base, TimestampMixin):

@@ -12,6 +12,7 @@ const items = [
   { href: "/agenda", label: "Agenda" },
   { href: "/vendas", label: "Vendas" },
   { href: "/financeiro", label: "Financeiro" },
+  { href: "/relatorios", label: "Relatorio" },
 ];
 
 const tabelas = [

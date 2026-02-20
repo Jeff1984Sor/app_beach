@@ -1434,8 +1434,8 @@ async def pagar_lancamento_financeiro(aluno_id: int, conta_id: int, payload: dic
     await db.execute(
         text(
             """
-            INSERT INTO movimentos_bancarios (data_movimento, tipo, valor, descricao, categoria, subcategoria, created_at, updated_at)
-            VALUES (:data_movimento, 'entrada', :valor, :descricao, :categoria, :subcategoria, NOW(), NOW())
+            INSERT INTO movimentos_bancarios (data_movimento, tipo, valor, descricao, categoria, subcategoria, conta_bancaria_id, created_at, updated_at)
+            VALUES (:data_movimento, 'entrada', :valor, :descricao, :categoria, :subcategoria, :conta_bancaria_id, NOW(), NOW())
             """
         ),
         {
@@ -1444,6 +1444,7 @@ async def pagar_lancamento_financeiro(aluno_id: int, conta_id: int, payload: dic
             "descricao": f"{row[3]} + {plano_nome}",
             "categoria": categoria,
             "subcategoria": subcategoria,
+            "conta_bancaria_id": conta_bancaria_id,
         },
     )
     await db.commit()
