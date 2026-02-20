@@ -50,6 +50,11 @@ function iconFor(label: string) {
   return ArrowRight;
 }
 
+function isCurrencyLabel(label: string) {
+  const s = String(label || "").toLowerCase();
+  return s.includes("receita") || s.includes("receb") || s.includes("a receber") || s.includes("fatur");
+}
+
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -140,7 +145,8 @@ export default function HomePage() {
   const [pagarConta, setPagarConta] = useState<ContaReceber | null>(null);
   const [dataPagamento, setDataPagamento] = useState(todayIso());
   const [paying, setPaying] = useState(false);
-  const [mostrarValores, setMostrarValores] = useState(true);
+  const [mostrarKpis, setMostrarKpis] = useState(true);
+  const [mostrarValoresPendencias, setMostrarValoresPendencias] = useState(true);
 
   function abrirPagar(c: ContaReceber) {
     setPagarConta(c);
@@ -213,6 +219,17 @@ export default function HomePage() {
       </header>
 
       <Section title={`Ola, ${nome}`} subtitle={role === "gestor" ? "Visao do gestor" : `Perfil ${role}`}>
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={() => setMostrarKpis((v) => !v)}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-2xl border border-border bg-white text-muted"
+            aria-label={mostrarKpis ? "Ocultar valores do resumo" : "Mostrar valores do resumo"}
+            title={mostrarKpis ? "Ocultar valores do resumo" : "Mostrar valores do resumo"}
+          >
+            {mostrarKpis ? <EyeOff size={16} /> : <Eye size={16} />}
+          </button>
+        </div>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {isLoading && Array.from({ length: 6 }).map((_, i) => <Card key={i} className="h-24 animate-pulse" />)}
           {!isLoading &&
@@ -223,7 +240,13 @@ export default function HomePage() {
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="text-xs uppercase tracking-wide text-muted">{k.label}</p>
-                      <p className="mt-2 text-3xl font-semibold text-text">{k.value}</p>
+                      <p className="mt-2 text-3xl font-semibold text-text">
+                        {mostrarKpis
+                          ? k.value
+                          : isCurrencyLabel(k.label)
+                            ? "R$ ••••••"
+                            : "••"}
+                      </p>
                     </div>
                     <div className="rounded-2xl bg-primary/10 p-3 text-primary">
                       <Icon size={18} />
@@ -312,12 +335,12 @@ export default function HomePage() {
               <div className="flex items-center gap-3">
                 <button
                   type="button"
-                  onClick={() => setMostrarValores((v) => !v)}
+                  onClick={() => setMostrarValoresPendencias((v) => !v)}
                   className="inline-flex h-9 w-9 items-center justify-center rounded-2xl border border-border bg-white text-muted"
-                  aria-label={mostrarValores ? "Ocultar valores" : "Mostrar valores"}
-                  title={mostrarValores ? "Ocultar valores" : "Mostrar valores"}
+                  aria-label={mostrarValoresPendencias ? "Ocultar valores" : "Mostrar valores"}
+                  title={mostrarValoresPendencias ? "Ocultar valores" : "Mostrar valores"}
                 >
-                  {mostrarValores ? <EyeOff size={16} /> : <Eye size={16} />}
+                  {mostrarValoresPendencias ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
                 <Link href="/financeiro" className="text-sm font-semibold text-primary">
                   Ver financeiro <ArrowRight className="ml-1 inline" size={16} />
@@ -343,7 +366,7 @@ export default function HomePage() {
                         </div>
                         <div className="shrink-0 text-right">
                           <p className="font-semibold text-text">
-                            {mostrarValores
+                            {mostrarValoresPendencias
                               ? Number(c.total || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
                               : "R$ ••••••"}
                           </p>
