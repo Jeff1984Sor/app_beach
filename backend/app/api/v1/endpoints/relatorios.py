@@ -30,6 +30,24 @@ def period_to_dates(periodo: str, data_inicio: str | None, data_fim: str | None)
     raise HTTPException(status_code=400, detail="Periodo invalido")
 
 
+def meses_por_recorrencia(recorrencia: str) -> int:
+    r = str(recorrencia or "mensal").strip().lower()
+    if r == "trimestral":
+        return 3
+    if r == "semestral":
+        return 6
+    if r == "anual":
+        return 12
+    return 1
+
+
+def valor_aula_contrato(valor_total: float, recorrencia: str, qtd_semanais: int) -> float:
+    semanas_mes = 4.0
+    qtd = max(int(qtd_semanais or 0), 1)
+    meses = max(meses_por_recorrencia(recorrencia), 1)
+    return round((float(valor_total or 0) / meses) / (semanas_mes * qtd), 2)
+
+
 @router.get("/quantidade-aulas-professor")
 async def relatorio_quantidade_aulas_professor(
     professor_id: int = Query(...),
@@ -57,31 +75,21 @@ async def relatorio_quantidade_aulas_professor(
     if not prof:
         raise HTTPException(status_code=404, detail="Professor nao encontrado")
 
-    regra = (
-        await db.execute(
-            text(
-                """
-                SELECT tipo, percentual, valor_por_aula
-                FROM regras_comissao
-                WHERE profissional_id = :id
-                ORDER BY id DESC
-                LIMIT 1
-                """
-            ),
-            {"id": professor_id},
-        )
-    ).first()
-    valor_por_aula = float(regra[2] or 0) if regra and str(regra[0] or "") == "valor_aula" else 0.0
-
     rows = (
         await db.execute(
             text(
                 """
                 SELECT a.id, a.inicio, COALESCE(a.status, 'agendada') AS status,
-                       COALESCE(ua.nome, 'Sem aluno') AS aluno_nome
+                       COALESCE(ua.nome, 'Sem aluno') AS aluno_nome,
+                       COALESCE(a.valor, 0) AS valor_aula_avulsa,
+                       a.contrato_id,
+                       COALESCE(c.valor, 0) AS contrato_valor,
+                       COALESCE(c.recorrencia, 'mensal') AS contrato_recorrencia,
+                       COALESCE(c.qtd_aulas_semanais, 1) AS contrato_qtd
                 FROM aulas a
                 LEFT JOIN alunos al ON al.id = a.aluno_id
                 LEFT JOIN usuarios ua ON ua.id = al.usuario_id
+                LEFT JOIN aluno_contratos c ON c.id = a.contrato_id
                 WHERE a.professor_id = :professor_id
                   AND DATE(a.inicio AT TIME ZONE 'America/Sao_Paulo') BETWEEN :ini AND :fim
                 ORDER BY a.inicio ASC
@@ -94,15 +102,21 @@ async def relatorio_quantidade_aulas_professor(
     aulas = []
     qtd_total = 0
     qtd_realizadas = 0
+    soma_valor_aula = 0.0
     for r in rows:
         dt = r[1]
         dt_br = dt.astimezone(BR_TZ) if getattr(dt, "tzinfo", None) else dt
         status = str(r[2] or "").lower()
         if status == "cancelada":
             continue
+        if r[4]:
+            valor_aula = float(r[4] or 0)
+        else:
+            valor_aula = valor_aula_contrato(float(r[6] or 0), str(r[7] or "mensal"), int(r[8] or 1))
         qtd_total += 1
         if status == "realizada":
             qtd_realizadas += 1
+        soma_valor_aula += valor_aula
         aulas.append(
             {
                 "id": r[0],
@@ -111,16 +125,18 @@ async def relatorio_quantidade_aulas_professor(
                 "hora_br": dt_br.strftime("%H:%M"),
                 "aluno_nome": r[3] or "Sem aluno",
                 "status": status or "agendada",
+                "valor_por_aula": round(valor_aula, 2),
             }
         )
+    valor_por_aula_medio = round((soma_valor_aula / qtd_total), 2) if qtd_total else 0.0
 
     return {
         "professor_id": int(prof[0]),
         "professor_nome": prof[1],
         "periodo": {"data_inicio": dt_ini.strftime("%Y-%m-%d"), "data_fim": dt_fim.strftime("%Y-%m-%d")},
-        "valor_por_aula": valor_por_aula,
+        "valor_por_aula": valor_por_aula_medio,
         "quantidade_aulas": qtd_total,
         "quantidade_realizadas": qtd_realizadas,
-        "total_estimado": round(valor_por_aula * qtd_total, 2),
+        "total_estimado": round(soma_valor_aula, 2),
         "aulas": aulas,
     }

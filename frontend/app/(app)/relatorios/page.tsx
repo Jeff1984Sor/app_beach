@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
 
 type Professor = { id: number; nome: string };
-type AulaItem = { id: number; data_br: string; hora_br: string; aluno_nome: string; status: string };
+type AulaItem = { id: number; data_br: string; hora_br: string; aluno_nome: string; status: string; valor_por_aula: number };
 type RelatorioResp = {
   professor_nome: string;
   valor_por_aula: number;
@@ -77,7 +77,7 @@ export default function RelatoriosPage() {
   function exportarExcel() {
     const header = ["Data", "Hora", "Aluno", "Status", "Valor por aula"];
     const body = linhas.map((a) =>
-      [a.data_br, a.hora_br, a.aluno_nome, a.status, String(relQ.data?.valor_por_aula || 0)]
+      [a.data_br, a.hora_br, a.aluno_nome, a.status, String(a.valor_por_aula || 0)]
         .map((v) => `"${String(v).replace(/"/g, '""')}"`)
         .join(",")
     );
@@ -150,7 +150,7 @@ export default function RelatoriosPage() {
               <p className="font-semibold text-text">{a.aluno_nome}</p>
               <p className="text-sm text-muted">{a.data_br} • {a.hora_br} • {a.status}</p>
             </div>
-            <p className="text-sm font-semibold text-text">{toBRL(relQ.data?.valor_por_aula || 0)}</p>
+            <p className="text-sm font-semibold text-text">{toBRL(a.valor_por_aula || 0)}</p>
           </div>
         ))}
         {linhas.length === 0 && <p className="text-sm text-muted">Sem dados para o filtro selecionado.</p>}

@@ -40,6 +40,7 @@ type PlanoApi = {
   valor: number;
   recorrencia: string;
   qtd_aulas_semanais: number;
+  valor_por_aula?: number;
   categoria?: string | null;
   subcategoria?: string | null;
   status: "ativo" | "inativo";
@@ -408,7 +409,7 @@ CONTRATADA: ______________________`);
       return planosApi.map((p) => ({
         id: p.id,
         titulo: p.nome,
-        detalhe: `${Number(p.valor || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} | ${p.recorrencia.charAt(0).toUpperCase() + p.recorrencia.slice(1)} | ${p.qtd_aulas_semanais} aulas/sem | ${p.categoria || "Sem categoria"} / ${p.subcategoria || "Sem subcategoria"}`,
+        detalhe: `${Number(p.valor || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} | ${p.recorrencia.charAt(0).toUpperCase() + p.recorrencia.slice(1)} | ${p.qtd_aulas_semanais} aulas/sem | Valor/aula ${Number(p.valor_por_aula || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} | ${p.categoria || "Sem categoria"} / ${p.subcategoria || "Sem subcategoria"}`,
         status: p.status,
       }));
     }
@@ -486,6 +487,14 @@ CONTRATADA: ______________________`);
   );
   const title = LABELS[entidade] || "Configuracoes";
 
+  const planoValorPorAulaPreview = useMemo(() => {
+    const valor = parseMoedaInput(planoValor);
+    const qtd = Math.max(Number(planoAulas || 0), 1);
+    const r = String(planoDuracao || "Mensal").toLowerCase();
+    const meses = r === "trimestral" ? 3 : r === "semestral" ? 6 : r === "anual" ? 12 : 1;
+    return (valor / meses) / (4 * qtd);
+  }, [planoValor, planoAulas, planoDuracao]);
+
   function tipoDaCategoria(nomeCategoria: string): "Receita" | "Despesa" {
     const cat = categoriasApi.find((x) => x.nome === nomeCategoria);
     return cat?.tipo === "Despesa" ? "Despesa" : "Receita";
@@ -534,7 +543,7 @@ CONTRATADA: ______________________`);
     if (entidade === "plano") {
       const plano = planosApi.find((p) => p.id === item.id);
       if (plano) {
-        setPlanoValor(String(plano.valor));
+        setPlanoValor(Number(plano.valor || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }));
         setPlanoDuracao(plano.recorrencia.charAt(0).toUpperCase() + plano.recorrencia.slice(1));
         setPlanoAulas(String(plano.qtd_aulas_semanais));
         setPlanoCategoria(plano.categoria || "");
@@ -959,7 +968,7 @@ CONTRATADA: ______________________`);
                   <>
                     <div className="space-y-1">
                       <p className="text-xs font-medium uppercase tracking-wide text-muted">Valor</p>
-                      <Input value={planoValor} onChange={(e) => setPlanoValor(e.target.value)} placeholder="R$ 380,00" />
+                      <Input value={planoValor} onChange={(e) => setPlanoValor(formatarMoedaInput(e.target.value))} placeholder="R$ 0,00" />
                     </div>
                     <div className="space-y-1">
                       <p className="text-xs font-medium uppercase tracking-wide text-muted">Duracao</p>
@@ -973,6 +982,12 @@ CONTRATADA: ______________________`);
                     <div className="space-y-1">
                       <p className="text-xs font-medium uppercase tracking-wide text-muted">Quantidade de aulas semanais</p>
                       <Input value={planoAulas} onChange={(e) => setPlanoAulas(e.target.value)} placeholder="Ex: 3" />
+                    </div>
+                    <div className="rounded-2xl border border-border bg-bg px-4 py-3 text-sm text-text">
+                      Valor por aula:{" "}
+                      <span className="font-semibold">
+                        {Number(planoValorPorAulaPreview || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                      </span>
                     </div>
                     <div className="space-y-1">
                       <p className="text-xs font-medium uppercase tracking-wide text-muted">Categoria</p>
