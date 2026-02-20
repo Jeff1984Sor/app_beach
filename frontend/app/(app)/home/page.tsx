@@ -146,8 +146,8 @@ export default function HomePage() {
   const [pagarConta, setPagarConta] = useState<ContaReceber | null>(null);
   const [dataPagamento, setDataPagamento] = useState(todayIso());
   const [paying, setPaying] = useState(false);
-  const [mostrarKpis, setMostrarKpis] = useState(true);
-  const [mostrarValoresPendencias, setMostrarValoresPendencias] = useState(true);
+  const [mostrarKpis, setMostrarKpis] = useState(false);
+  const [mostrarValoresPendencias, setMostrarValoresPendencias] = useState(false);
 
   function abrirPagar(c: ContaReceber) {
     setPagarConta(c);
@@ -286,10 +286,9 @@ export default function HomePage() {
                 aulasHoje.map((a) => (
                   <div key={a.id} className="flex items-center justify-between rounded-2xl border border-border bg-white p-4">
                     <div className="min-w-0">
-                      <p className="text-sm font-semibold text-text">
-                        {a.aluno_nome || `${a.data_br || todayIso()} • ${a.hora_br || "--:--"}`}
-                      </p>
+                      <p className="text-sm font-semibold text-text">{a.aluno_nome || "Aluno nao informado"}</p>
                       <p className="truncate text-sm text-muted">{a.professor_nome} {a.unidade ? `• ${a.unidade}` : ""}</p>
+                      <p className="text-xs text-muted">{a.data_br || todayIso()} • {a.hora_br || "--:--"}</p>
                     </div>
                     <div className="flex items-center gap-2">
                       <button
