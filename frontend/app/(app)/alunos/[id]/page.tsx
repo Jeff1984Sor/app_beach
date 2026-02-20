@@ -127,6 +127,7 @@ export default function AlunoFichaPage() {
   const [avulsaProfessorId, setAvulsaProfessorId] = useState("");
   const [avulsaHora, setAvulsaHora] = useState("");
   const [avulsaValor, setAvulsaValor] = useState("");
+  const [avulsaObservacao, setAvulsaObservacao] = useState("");
   const [avulsaCategoria, setAvulsaCategoria] = useState("");
   const [avulsaSubcategoria, setAvulsaSubcategoria] = useState("");
   const [avulsaMsg, setAvulsaMsg] = useState("");
@@ -701,6 +702,7 @@ export default function AlunoFichaPage() {
         data: avulsaData,
         hora: avulsaHora,
         valor: Number(String(avulsaValor || "0").replace(",", ".")),
+        observacao: avulsaObservacao.trim() || null,
         categoria: avulsaCategoria || null,
         subcategoria: avulsaSubcategoria || null,
         unidade: data.unidade,
@@ -714,6 +716,7 @@ export default function AlunoFichaPage() {
     setOpenAulaAvulsa(false);
     setAvulsaMsg("");
     setAvulsaHora("");
+    setAvulsaObservacao("");
     qc.invalidateQueries({ queryKey: ["aluno-ficha", params.id] });
   }
 
@@ -1200,6 +1203,14 @@ export default function AlunoFichaPage() {
           </select>
           <p className="text-xs font-medium uppercase tracking-wide text-muted">Valor</p>
           <Input placeholder="Ex: 120,00" value={avulsaValor} onChange={(e) => setAvulsaValor(e.target.value)} />
+          <p className="text-xs font-medium uppercase tracking-wide text-muted">Observacao (opcional)</p>
+          <textarea
+            value={avulsaObservacao}
+            onChange={(e) => setAvulsaObservacao(e.target.value)}
+            rows={4}
+            className="w-full resize-y rounded-2xl border border-border bg-white px-4 py-3 text-sm text-text outline-none focus:ring-2 focus:ring-primary/30"
+            placeholder="Ex: aluno pediu foco no saque hoje"
+          />
           <p className="text-xs font-medium uppercase tracking-wide text-muted">Categoria</p>
           <select value={avulsaCategoria} onChange={(e) => { setAvulsaCategoria(e.target.value); setAvulsaSubcategoria(""); }} className="h-12 w-full rounded-2xl border border-border bg-white px-4 text-text outline-none">
             <option value="">Selecione</option>

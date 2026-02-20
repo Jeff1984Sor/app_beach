@@ -225,6 +225,25 @@ async def ensure_aulas_desconto_columns(db: AsyncSession):
     await db.commit()
 
 
+async def ensure_aulas_observacao_column(db: AsyncSession):
+    await db.execute(
+        text(
+            """
+            DO $$
+            BEGIN
+              IF NOT EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'aulas' AND column_name = 'observacao'
+              ) THEN
+                ALTER TABLE aulas ADD COLUMN observacao TEXT;
+              END IF;
+            END $$;
+            """
+        )
+    )
+    await db.commit()
+
+
 async def slot_em_conflito(
     db: AsyncSession,
     professor_id: int,
@@ -998,6 +1017,7 @@ async def disponibilidade_aula_avulsa(
 async def criar_aula_avulsa(aluno_id: int, payload: dict, db: AsyncSession = Depends(get_db)):
     await ensure_finance_columns(db)
     await ensure_bloqueios_table(db)
+    await ensure_aulas_observacao_column(db)
     aluno = await db.get(Aluno, aluno_id)
     if not aluno:
         raise HTTPException(status_code=404, detail="Aluno nao encontrado")
@@ -1007,6 +1027,7 @@ async def criar_aula_avulsa(aluno_id: int, payload: dict, db: AsyncSession = Dep
     professor_id = payload.get("professor_id")
     valor = float(payload.get("valor") or 0)
     duracao_min = int(payload.get("duracao_minutos") or 60)
+    observacao = (payload.get("observacao") or "").strip() or None
 
     if not (data_txt and hora_txt and professor_id):
         raise HTTPException(status_code=400, detail="Informe data, hora e professor")
@@ -1044,6 +1065,7 @@ async def criar_aula_avulsa(aluno_id: int, payload: dict, db: AsyncSession = Dep
         fim=fim,
         status="agendada",
         valor=valor,
+        observacao=observacao,
     )
     db.add(aula)
     if valor > 0:

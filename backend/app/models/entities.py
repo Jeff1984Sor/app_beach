@@ -62,6 +62,7 @@ class Aula(Base, TimestampMixin):
     fim: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     status: Mapped[str] = mapped_column(String(20), default="agendada")
     valor: Mapped[float] = mapped_column(Numeric(10, 2), default=0)
+    observacao: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class ContaReceber(Base, TimestampMixin):
