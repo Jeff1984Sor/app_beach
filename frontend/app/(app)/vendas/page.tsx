@@ -49,6 +49,7 @@ export default function VendasPage() {
   const [produtoId, setProdutoId] = useState("");
   const [quantidade, setQuantidade] = useState("1");
   const [valorUnitario, setValorUnitario] = useState("");
+  const [dataVenda, setDataVenda] = useState(todayIso());
   const [tipoComprador, setTipoComprador] = useState<"aluno" | "outro">("aluno");
   const [alunoId, setAlunoId] = useState("");
   const [clienteNome, setClienteNome] = useState("");
@@ -108,7 +109,7 @@ export default function VendasPage() {
   useEffect(() => {
     const p = produtosAtivos.find((x) => String(x.id) === String(produtoId));
     if (p && Number(p.valor_venda || 0) > 0) {
-      setValorUnitario(String(p.valor_venda));
+      setValorUnitario(formatarMoedaInput(String(p.valor_venda)));
     }
   }, [produtoId, produtosAtivos]);
   const totalPeriodo = useMemo(
@@ -116,13 +117,26 @@ export default function VendasPage() {
     [vendasQ.data]
   );
 
+  function formatarMoedaInput(raw: string) {
+    const digits = String(raw || "").replace(/\D/g, "");
+    const cents = Number(digits || "0");
+    const valor = cents / 100;
+    return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  }
+
+  function parseMoedaInput(raw: string) {
+    const clean = String(raw || "").replace(/[^\d,.-]/g, "").replace(/\./g, "").replace(",", ".");
+    const n = Number(clean);
+    return Number.isFinite(n) ? n : 0;
+  }
+
   async function salvarVenda() {
     setMsg("");
     const payload: any = {
       produto_id: produtoId ? Number(produtoId) : null,
       quantidade: Number(quantidade || 0),
-      valor_unitario: Number(String(valorUnitario || "0").replace(",", ".")),
-      data_venda: todayIso(),
+      valor_unitario: parseMoedaInput(valorUnitario),
+      data_venda: dataVenda || todayIso(),
       aluno_id: tipoComprador === "aluno" && alunoId ? Number(alunoId) : null,
       cliente_nome: tipoComprador === "outro" ? clienteNome : null,
     };
@@ -139,6 +153,7 @@ export default function VendasPage() {
     setProdutoId("");
     setQuantidade("1");
     setValorUnitario("");
+    setDataVenda(todayIso());
     setAlunoId("");
     setClienteNome("");
     qc.invalidateQueries({ queryKey: ["vendas"] });
@@ -211,8 +226,9 @@ export default function VendasPage() {
         </select>
         <div className="grid gap-3 sm:grid-cols-2">
           <Input value={quantidade} onChange={(e) => setQuantidade(e.target.value)} placeholder="Quantidade" />
-          <Input value={valorUnitario} onChange={(e) => setValorUnitario(e.target.value)} placeholder="Valor unitario" />
+          <Input value={valorUnitario} onChange={(e) => setValorUnitario(formatarMoedaInput(e.target.value))} placeholder="R$ 0,00" />
         </div>
+        <Input type="date" value={dataVenda} onChange={(e) => setDataVenda(e.target.value)} />
         <div className="flex items-center gap-2">
           <button type="button" onClick={() => setTipoComprador("aluno")} className={`rounded-xl px-4 py-2 text-sm ${tipoComprador === "aluno" ? "bg-primary text-white" : "border border-border text-text"}`}>Aluno</button>
           <button type="button" onClick={() => setTipoComprador("outro")} className={`rounded-xl px-4 py-2 text-sm ${tipoComprador === "outro" ? "bg-primary text-white" : "border border-border text-text"}`}>Outra pessoa</button>
