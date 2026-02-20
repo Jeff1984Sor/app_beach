@@ -63,7 +63,10 @@ export default function RelatoriosPage() {
         qs.set("data_fim", dataFim);
       }
       const res = await fetch(`${API_URL}/relatorios/quantidade-aulas-professor?${qs.toString()}`, { cache: "no-store" });
-      if (!res.ok) return null;
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || "Falha ao carregar relatorio");
+      }
       return res.json();
     },
     enabled: !!professorId,
@@ -117,6 +120,9 @@ export default function RelatoriosPage() {
           </div>
         )}
       </Section>
+      {relQ.isError && (
+        <Card className="p-4 text-sm text-danger">{(relQ.error as Error)?.message || "Falha ao carregar relatorio."}</Card>
+      )}
 
       <div className="grid gap-3 sm:grid-cols-4">
         <Card className="p-4">

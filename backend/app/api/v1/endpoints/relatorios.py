@@ -41,11 +41,6 @@ async def relatorio_quantidade_aulas_professor(
     await ensure_regras_comissao_columns(db)
     dt_ini, dt_fim = period_to_dates(periodo, data_inicio, data_fim)
 
-    inicio_local = datetime(dt_ini.year, dt_ini.month, dt_ini.day, 0, 0, 0, tzinfo=BR_TZ)
-    fim_local = datetime(dt_fim.year, dt_fim.month, dt_fim.day, 0, 0, 0, tzinfo=BR_TZ) + timedelta(days=1)
-    inicio_utc = inicio_local.astimezone(ZoneInfo("UTC"))
-    fim_utc = fim_local.astimezone(ZoneInfo("UTC"))
-
     prof = (
         await db.execute(
             text(
@@ -88,12 +83,11 @@ async def relatorio_quantidade_aulas_professor(
                 LEFT JOIN alunos al ON al.id = a.aluno_id
                 LEFT JOIN usuarios ua ON ua.id = al.usuario_id
                 WHERE a.professor_id = :professor_id
-                  AND a.inicio >= :ini
-                  AND a.inicio < :fim
+                  AND DATE(a.inicio AT TIME ZONE 'America/Sao_Paulo') BETWEEN :ini AND :fim
                 ORDER BY a.inicio ASC
                 """
             ),
-            {"professor_id": professor_id, "ini": inicio_utc, "fim": fim_utc},
+            {"professor_id": professor_id, "ini": dt_ini, "fim": dt_fim},
         )
     ).all()
 
