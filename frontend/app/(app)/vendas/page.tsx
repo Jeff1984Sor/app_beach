@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Section } from "@/components/ui/section";
@@ -10,7 +10,7 @@ import { Modal } from "@/components/ui/modal";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
 
-type Produto = { id: number; nome: string; status: string };
+type Produto = { id: number; nome: string; status: string; valor_venda?: number };
 type Aluno = { id: number; nome: string };
 type ContaBancaria = { id: number; nome_conta: string; banco: string };
 type Venda = {
@@ -105,6 +105,12 @@ export default function VendasPage() {
     () => (produtosQ.data || []).filter((p) => String(p.status || "").toLowerCase() === "ativo"),
     [produtosQ.data]
   );
+  useEffect(() => {
+    const p = produtosAtivos.find((x) => String(x.id) === String(produtoId));
+    if (p && Number(p.valor_venda || 0) > 0) {
+      setValorUnitario(String(p.valor_venda));
+    }
+  }, [produtoId, produtosAtivos]);
   const totalPeriodo = useMemo(
     () => (vendasQ.data || []).reduce((acc, v) => acc + Number(v.valor_total || 0), 0),
     [vendasQ.data]

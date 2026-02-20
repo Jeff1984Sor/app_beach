@@ -123,6 +123,9 @@ type RegraComissaoApi = {
 type ProdutoApi = {
   id: number;
   nome: string;
+  valor_custo: number;
+  valor_venda: number;
+  lucro: number;
   status: "ativo" | "inativo";
 };
 
@@ -195,6 +198,8 @@ export default function ConfiguracoesPage() {
   const [regraTipo, setRegraTipo] = useState<"percentual" | "valor_aula">("percentual");
   const [regraPercentual, setRegraPercentual] = useState("");
   const [regraValorAula, setRegraValorAula] = useState("");
+  const [produtoValorCusto, setProdutoValorCusto] = useState("");
+  const [produtoValorVenda, setProdutoValorVenda] = useState("");
   const [payOpen, setPayOpen] = useState(false);
   const [payContaId, setPayContaId] = useState<number | null>(null);
   const [payDataPagamento, setPayDataPagamento] = useState(new Date().toISOString().slice(0, 10));
@@ -429,7 +434,7 @@ CONTRATADA: ______________________`);
       return produtosApi.map((p) => ({
         id: p.id,
         titulo: p.nome,
-        detalhe: "Produto para vendas",
+        detalhe: `Custo ${Number(p.valor_custo || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} • Venda ${Number(p.valor_venda || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} • Lucro ${Number((p.valor_venda || 0) - (p.valor_custo || 0)).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}`,
         status: p.status,
       }));
     }
@@ -500,6 +505,8 @@ CONTRATADA: ______________________`);
     setRegraTipo("percentual");
     setRegraPercentual("");
     setRegraValorAula("");
+    setProdutoValorCusto("");
+    setProdutoValorVenda("");
     if (entidade === "modelo_contrato") {
       setContratoTexto(contratoTexto);
     }
@@ -570,6 +577,13 @@ CONTRATADA: ______________________`);
     if (entidade === "modelo_contrato") {
       setContratoTexto(item.detalhe);
     }
+    if (entidade === "produtos") {
+      const p = produtosApi.find((x) => x.id === item.id);
+      if (p) {
+        setProdutoValorCusto(String(p.valor_custo || 0));
+        setProdutoValorVenda(String(p.valor_venda || 0));
+      }
+    }
     setOpen(true);
   }
 
@@ -625,13 +639,21 @@ CONTRATADA: ______________________`);
       return;
     }
     if (entidade === "produtos") {
-      const payload = { nome: titulo, status };
+      const payload = {
+        nome: titulo,
+        valor_custo: Number(String(produtoValorCusto || "0").replace(",", ".")),
+        valor_venda: Number(String(produtoValorVenda || "0").replace(",", ".")),
+        status,
+      };
       const url = editId ? `${API_URL}/produtos/${editId}` : `${API_URL}/produtos`;
       const method = editId ? "PUT" : "POST";
       const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       if (res.ok) {
         qc.invalidateQueries({ queryKey: ["produtos-config"] });
         setOpen(false);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        window.alert(err.detail || "Falha ao salvar produto.");
       }
       return;
     }
@@ -1138,6 +1160,26 @@ CONTRATADA: ______________________`);
                         </div>
                       </div>
                     )}
+                  </>
+                ) : entidade === "produtos" ? (
+                  <>
+                    <div className="space-y-1">
+                      <p className="text-xs font-medium uppercase tracking-wide text-muted">Valor de custo</p>
+                      <Input value={produtoValorCusto} onChange={(e) => setProdutoValorCusto(e.target.value)} placeholder="Ex: 30,00" />
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-xs font-medium uppercase tracking-wide text-muted">Valor de venda</p>
+                      <Input value={produtoValorVenda} onChange={(e) => setProdutoValorVenda(e.target.value)} placeholder="Ex: 50,00" />
+                    </div>
+                    <div className="rounded-2xl border border-border bg-bg px-4 py-3 text-sm text-text">
+                      Lucro:{" "}
+                      <span className="font-semibold">
+                        {(
+                          Number(String(produtoValorVenda || "0").replace(",", ".")) -
+                          Number(String(produtoValorCusto || "0").replace(",", "."))
+                        ).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                      </span>
+                    </div>
                   </>
                 ) : (
                   <div className="space-y-1">
