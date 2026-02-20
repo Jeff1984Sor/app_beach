@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, CalendarDays, CheckCircle2, CreditCard, PhoneOff, TrendingUp, Users, XCircle } from "lucide-react";
+import { ArrowRight, CalendarDays, CheckCircle2, CreditCard, Eye, EyeOff, PhoneOff, TrendingUp, Users, XCircle } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Section } from "@/components/ui/section";
 import { Modal } from "@/components/ui/modal";
@@ -140,6 +140,7 @@ export default function HomePage() {
   const [pagarConta, setPagarConta] = useState<ContaReceber | null>(null);
   const [dataPagamento, setDataPagamento] = useState(todayIso());
   const [paying, setPaying] = useState(false);
+  const [mostrarValores, setMostrarValores] = useState(true);
 
   function abrirPagar(c: ContaReceber) {
     setPagarConta(c);
@@ -308,9 +309,20 @@ export default function HomePage() {
                 <p className="text-xs uppercase tracking-wide text-muted">Pendencias</p>
                 <p className="text-lg font-semibold text-text">Contas a Receber</p>
               </div>
-              <Link href="/financeiro" className="text-sm font-semibold text-primary">
-                Ver financeiro <ArrowRight className="ml-1 inline" size={16} />
-              </Link>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setMostrarValores((v) => !v)}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-2xl border border-border bg-white text-muted"
+                  aria-label={mostrarValores ? "Ocultar valores" : "Mostrar valores"}
+                  title={mostrarValores ? "Ocultar valores" : "Mostrar valores"}
+                >
+                  {mostrarValores ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+                <Link href="/financeiro" className="text-sm font-semibold text-primary">
+                  Ver financeiro <ArrowRight className="ml-1 inline" size={16} />
+                </Link>
+              </div>
             </div>
             <div className="px-4 pb-4">
               {pendLoading && <div className="h-24 animate-pulse rounded-2xl bg-bg" />}
@@ -331,7 +343,9 @@ export default function HomePage() {
                         </div>
                         <div className="shrink-0 text-right">
                           <p className="font-semibold text-text">
-                            {Number(c.total || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                            {mostrarValores
+                              ? Number(c.total || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+                              : "R$ ••••••"}
                           </p>
                           <button
                             type="button"
