@@ -150,7 +150,10 @@ export default function RelatoriosPage() {
               <p className="font-semibold text-text">{a.aluno_nome}</p>
               <p className="text-sm text-muted">{a.data_br} • {a.hora_br} • {a.status}</p>
             </div>
-            <p className="text-sm font-semibold text-text">{toBRL(a.valor_por_aula || 0)}</p>
+            <div className="text-right">
+              <p className="text-xs text-muted">Valor por aula</p>
+              <p className="text-sm font-semibold text-text">{toBRL(a.valor_por_aula || 0)}</p>
+            </div>
           </div>
         ))}
         {linhas.length === 0 && <p className="text-sm text-muted">Sem dados para o filtro selecionado.</p>}

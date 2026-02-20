@@ -109,10 +109,11 @@ async def relatorio_quantidade_aulas_professor(
         status = str(r[2] or "").lower()
         if status == "cancelada":
             continue
-        if r[4]:
-            valor_aula = float(r[4] or 0)
-        else:
+        contrato_id = r[5]
+        if contrato_id:
             valor_aula = valor_aula_contrato(float(r[6] or 0), str(r[7] or "mensal"), int(r[8] or 1))
+        else:
+            valor_aula = float(r[4] or 0)
         qtd_total += 1
         if status == "realizada":
             qtd_realizadas += 1
