@@ -40,6 +40,15 @@ type ContaReceberAgg = {
   proxima_conta: ContaReceber;
 };
 
+type AgendaGrupo = {
+  key: string;
+  data_br: string;
+  hora_br: string;
+  professor_nome: string;
+  unidade: string;
+  aulas: AgendaAula[];
+};
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
 
 function iconFor(label: string) {
@@ -175,9 +184,32 @@ export default function HomePage() {
   }
 
   const kpis = data?.kpis || [];
-  const aulasHoje = (agendaHoje?.aulas || [])
-    .filter((a) => String(a.status || "").toLowerCase() !== "realizada")
-    .slice(0, 6);
+  const aulasHoje = (agendaHoje?.aulas || []).filter((a) => String(a.status || "").toLowerCase() !== "realizada");
+
+  const gruposAgenda = useMemo(() => {
+    const grupos = new Map<string, AgendaGrupo>();
+    for (const a of aulasHoje) {
+      const dataBr = a.data_br || todayIso();
+      const horaBr = a.hora_br || "--:--";
+      const unidade = a.unidade || "";
+      const professor = a.professor_nome || "Sem professor";
+      const key = `${dataBr}|${horaBr}|${unidade}`;
+      const existente = grupos.get(key);
+      if (!existente) {
+        grupos.set(key, {
+          key,
+          data_br: dataBr,
+          hora_br: horaBr,
+          professor_nome: professor,
+          unidade,
+          aulas: [a],
+        });
+        continue;
+      }
+      existente.aulas.push(a);
+    }
+    return Array.from(grupos.values()).slice(0, 6);
+  }, [aulasHoje]);
 
   const contasAbertasPorAluno = useMemo(() => {
     const m = new Map<string, ContaReceberAgg>();
@@ -279,49 +311,53 @@ export default function HomePage() {
             </div>
             <div className="space-y-2 px-4 pb-4">
               {agendaLoading && <div className="h-24 animate-pulse rounded-2xl bg-bg" />}
-              {!agendaLoading && aulasHoje.length === 0 && (
+              {!agendaLoading && gruposAgenda.length === 0 && (
                 <div className="rounded-2xl bg-bg p-4 text-sm text-muted">Sem aulas para hoje.</div>
               )}
               {!agendaLoading &&
-                aulasHoje.map((a) => (
-                  <div key={a.id} className="flex items-center justify-between rounded-2xl border border-border bg-white p-4">
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-text">{a.aluno_nome || "Aluno nao informado"}</p>
-                      <p className="truncate text-sm text-muted">{a.professor_nome} {a.unidade ? `• ${a.unidade}` : ""}</p>
-                      <p className="text-xs text-muted">{a.data_br || todayIso()} • {a.hora_br || "--:--"}</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        disabled={savingAula === a.id}
-                        onClick={() => atualizarStatusAula(a, "realizada")}
-                        className="inline-flex h-9 w-9 items-center justify-center rounded-2xl border border-border bg-white text-success disabled:opacity-50"
-                        aria-label="Marcar como realizada"
-                        title="Realizada"
-                      >
-                        <CheckCircle2 size={18} />
-                      </button>
-                      <button
-                        type="button"
-                        disabled={savingAula === a.id}
-                        onClick={() => atualizarStatusAula(a, "falta_aviso")}
-                        className="inline-flex h-9 w-9 items-center justify-center rounded-2xl border border-border bg-white text-primary disabled:opacity-50"
-                        aria-label="Marcar falta avisada"
-                        title="Falta avisada"
-                      >
-                        <PhoneOff size={18} />
-                      </button>
-                      <button
-                        type="button"
-                        disabled={savingAula === a.id}
-                        onClick={() => atualizarStatusAula(a, "falta")}
-                        className="inline-flex h-9 w-9 items-center justify-center rounded-2xl border border-border bg-white text-danger disabled:opacity-50"
-                        aria-label="Marcar falta"
-                        title="Falta"
-                      >
-                        <XCircle size={18} />
-                      </button>
-                      <span className="rounded-full bg-primary/10 px-3 py-1 text-xs text-primary">{a.status || "agendada"}</span>
+                gruposAgenda.map((g) => (
+                  <div key={g.key} className="rounded-2xl border border-border bg-white p-4">
+                    <p className="text-sm text-muted">{g.data_br} • {g.hora_br}</p>
+                    <p className="truncate text-sm text-muted">{g.professor_nome} {g.unidade ? `• ${g.unidade}` : ""}</p>
+                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                      {g.aulas.map((a) => (
+                        <div key={a.id} className="rounded-xl border border-border p-3">
+                          <p className="truncate text-sm font-semibold text-text">{a.aluno_nome || "Aluno nao informado"}</p>
+                          <div className="mt-2 flex items-center gap-2">
+                            <button
+                              type="button"
+                              disabled={savingAula === a.id}
+                              onClick={() => atualizarStatusAula(a, "realizada")}
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-border bg-white text-success disabled:opacity-50"
+                              aria-label="Marcar como realizada"
+                              title="Realizada"
+                            >
+                              <CheckCircle2 size={16} />
+                            </button>
+                            <button
+                              type="button"
+                              disabled={savingAula === a.id}
+                              onClick={() => atualizarStatusAula(a, "falta_aviso")}
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-border bg-white text-primary disabled:opacity-50"
+                              aria-label="Marcar falta avisada"
+                              title="Falta avisada"
+                            >
+                              <PhoneOff size={16} />
+                            </button>
+                            <button
+                              type="button"
+                              disabled={savingAula === a.id}
+                              onClick={() => atualizarStatusAula(a, "falta")}
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-border bg-white text-danger disabled:opacity-50"
+                              aria-label="Marcar falta"
+                              title="Falta"
+                            >
+                              <XCircle size={16} />
+                            </button>
+                            <span className="rounded-full bg-primary/10 px-2 py-1 text-xs text-primary">{a.status || "agendada"}</span>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 ))}
