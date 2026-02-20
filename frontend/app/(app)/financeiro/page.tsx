@@ -8,6 +8,7 @@ import { Section } from "@/components/ui/section";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { exportReportExcel, exportReportPdf } from "@/lib/report-export";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
 
@@ -152,24 +153,77 @@ export default function FinanceiroPage() {
   }
 
   function exportarExcel() {
-    const header = ["Data", "Tipo", "Conta", "Categoria", "Subcategoria", "Descricao", "Valor"];
-    const lines = filtrados.map((m) =>
-      [m.data_movimento, m.tipo, m.conta_nome || "", m.categoria || "", m.subcategoria || "", m.descricao || "", String(m.valor || 0)]
-        .map((v) => `"${String(v).replace(/"/g, '""')}"`)
-        .join(",")
-    );
-    const csv = [header.join(","), ...lines].join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `financeiro_${isoToday()}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    exportReportExcel({
+      fileBaseName: "relatorio_financeiro",
+      title: "Relatorio Financeiro",
+      subtitle: `Gerado em ${new Date().toLocaleString("pt-BR")}`,
+      filters: [
+        `Conta: ${contaFiltro || "Todas"}`,
+        `Categoria: ${categoriaFiltro || "Todas"}`,
+        `Periodo: ${periodo}`,
+        `${periodRange.ini} ate ${periodRange.fim}`,
+      ],
+      summary: [
+        { label: "Receita", value: toBRL(resumo.receitas) },
+        { label: "Despesas", value: toBRL(resumo.despesas) },
+        { label: "Resultado", value: toBRL(resumo.resultado) },
+      ],
+      columns: [
+        { header: "Data", key: "data_movimento" },
+        { header: "Tipo", key: "tipo" },
+        { header: "Conta", key: "conta_nome" },
+        { header: "Categoria", key: "categoria" },
+        { header: "Subcategoria", key: "subcategoria" },
+        { header: "Descricao", key: "descricao" },
+        { header: "Valor", key: "valor" },
+      ],
+      rows: filtrados.map((m) => ({
+        data_movimento: m.data_movimento,
+        tipo: m.tipo,
+        conta_nome: m.conta_nome || "Sem conta",
+        categoria: m.categoria || "Sem categoria",
+        subcategoria: m.subcategoria || "Sem subcategoria",
+        descricao: m.descricao || "-",
+        valor: toBRL(Number(m.valor || 0)),
+      })),
+    });
   }
 
   function exportarPDF() {
-    window.print();
+    exportReportPdf({
+      fileBaseName: "relatorio_financeiro",
+      title: "Relatorio Financeiro",
+      subtitle: `Gerado em ${new Date().toLocaleString("pt-BR")}`,
+      filters: [
+        `Conta: ${contaFiltro || "Todas"}`,
+        `Categoria: ${categoriaFiltro || "Todas"}`,
+        `Periodo: ${periodo}`,
+        `${periodRange.ini} ate ${periodRange.fim}`,
+      ],
+      summary: [
+        { label: "Receita", value: toBRL(resumo.receitas) },
+        { label: "Despesas", value: toBRL(resumo.despesas) },
+        { label: "Resultado", value: toBRL(resumo.resultado) },
+      ],
+      columns: [
+        { header: "Data", key: "data_movimento" },
+        { header: "Tipo", key: "tipo" },
+        { header: "Conta", key: "conta_nome" },
+        { header: "Categoria", key: "categoria" },
+        { header: "Subcategoria", key: "subcategoria" },
+        { header: "Descricao", key: "descricao" },
+        { header: "Valor", key: "valor" },
+      ],
+      rows: filtrados.map((m) => ({
+        data_movimento: m.data_movimento,
+        tipo: m.tipo,
+        conta_nome: m.conta_nome || "Sem conta",
+        categoria: m.categoria || "Sem categoria",
+        subcategoria: m.subcategoria || "Sem subcategoria",
+        descricao: m.descricao || "-",
+        valor: toBRL(Number(m.valor || 0)),
+      })),
+    });
   }
 
   return (

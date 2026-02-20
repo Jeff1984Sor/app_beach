@@ -7,6 +7,7 @@ import { Section } from "@/components/ui/section";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
+import { exportReportExcel, exportReportPdf } from "@/lib/report-export";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
 
@@ -173,26 +174,74 @@ export default function VendasPage() {
     qc.invalidateQueries({ queryKey: ["contas-receber-config"] });
   }
 
-  function exportarCSV() {
+  function exportarExcel() {
     const rows = vendasQ.data || [];
-    const header = ["Data", "Comprador", "Produto", "Quantidade", "Valor Unitario", "Valor Total", "Status"];
-    const lines = rows.map((r) =>
-      [r.data_venda, r.comprador_nome, r.produto_nome, String(r.quantidade), String(r.valor_unitario), String(r.valor_total), r.status]
-        .map((v) => `"${String(v || "").replace(/"/g, '""')}"`)
-        .join(",")
-    );
-    const csv = [header.join(","), ...lines].join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `vendas_${todayIso()}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    exportReportExcel({
+      fileBaseName: "relatorio_vendas",
+      title: "Relatorio de Vendas",
+      subtitle: `Gerado em ${new Date().toLocaleString("pt-BR")}`,
+      filters: [
+        `Periodo: ${periodo}`,
+        periodo === "personalizado" ? `${dataInicio} ate ${dataFim}` : "",
+      ].filter(Boolean),
+      summary: [
+        { label: "Itens", value: String(rows.length) },
+        { label: "Total", value: toBRL(totalPeriodo) },
+      ],
+      columns: [
+        { header: "Data", key: "data_venda" },
+        { header: "Comprador", key: "comprador_nome" },
+        { header: "Produto", key: "produto_nome" },
+        { header: "Quantidade", key: "quantidade" },
+        { header: "Valor unitario", key: "valor_unitario" },
+        { header: "Valor total", key: "valor_total" },
+        { header: "Status", key: "status" },
+      ],
+      rows: rows.map((r) => ({
+        data_venda: r.data_venda,
+        comprador_nome: r.comprador_nome,
+        produto_nome: r.produto_nome,
+        quantidade: r.quantidade,
+        valor_unitario: toBRL(Number(r.valor_unitario || 0)),
+        valor_total: toBRL(Number(r.valor_total || 0)),
+        status: r.status,
+      })),
+    });
   }
 
   function exportarPDF() {
-    window.print();
+    const rows = vendasQ.data || [];
+    exportReportPdf({
+      fileBaseName: "relatorio_vendas",
+      title: "Relatorio de Vendas",
+      subtitle: `Gerado em ${new Date().toLocaleString("pt-BR")}`,
+      filters: [
+        `Periodo: ${periodo}`,
+        periodo === "personalizado" ? `${dataInicio} ate ${dataFim}` : "",
+      ].filter(Boolean),
+      summary: [
+        { label: "Itens", value: String(rows.length) },
+        { label: "Total", value: toBRL(totalPeriodo) },
+      ],
+      columns: [
+        { header: "Data", key: "data_venda" },
+        { header: "Comprador", key: "comprador_nome" },
+        { header: "Produto", key: "produto_nome" },
+        { header: "Quantidade", key: "quantidade" },
+        { header: "Valor unitario", key: "valor_unitario" },
+        { header: "Valor total", key: "valor_total" },
+        { header: "Status", key: "status" },
+      ],
+      rows: rows.map((r) => ({
+        data_venda: r.data_venda,
+        comprador_nome: r.comprador_nome,
+        produto_nome: r.produto_nome,
+        quantidade: r.quantidade,
+        valor_unitario: toBRL(Number(r.valor_unitario || 0)),
+        valor_total: toBRL(Number(r.valor_total || 0)),
+        status: r.status,
+      })),
+    });
   }
 
   async function confirmarPagamento() {
@@ -309,7 +358,7 @@ export default function VendasPage() {
               <Input type="date" value={dataFim} onChange={(e) => setDataFim(e.target.value)} />
             </>
           )}
-          <button onClick={exportarCSV} className="ml-auto rounded-xl border border-border px-3 py-2 text-sm text-text">Excel</button>
+          <button onClick={exportarExcel} className="ml-auto rounded-xl border border-border px-3 py-2 text-sm text-text">Excel</button>
           <button onClick={exportarPDF} className="rounded-xl border border-border px-3 py-2 text-sm text-text">PDF</button>
         </div>
         <div className="space-y-2">

@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Section } from "@/components/ui/section";
 import { Input } from "@/components/ui/input";
+import { exportReportExcel, exportReportPdf } from "@/lib/report-export";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
 
@@ -40,9 +41,24 @@ function toBRL(v: number) {
 
 export default function RelatoriosPage() {
   const [periodo, setPeriodo] = useState<"mes" | "semana" | "custom">("mes");
+  const [mesSelecionado, setMesSelecionado] = useState(String(new Date().getMonth() + 1).padStart(2, "0"));
   const [dataInicio, setDataInicio] = useState(startOfMonthIso());
   const [dataFim, setDataFim] = useState(isoToday());
   const [professorId, setProfessorId] = useState("");
+  const mesesAno = [
+    { value: "01", label: "Janeiro" },
+    { value: "02", label: "Fevereiro" },
+    { value: "03", label: "Marco" },
+    { value: "04", label: "Abril" },
+    { value: "05", label: "Maio" },
+    { value: "06", label: "Junho" },
+    { value: "07", label: "Julho" },
+    { value: "08", label: "Agosto" },
+    { value: "09", label: "Setembro" },
+    { value: "10", label: "Outubro" },
+    { value: "11", label: "Novembro" },
+    { value: "12", label: "Dezembro" },
+  ];
 
   const profQ = useQuery<Professor[]>({
     queryKey: ["agenda-professores-rel"],
@@ -54,11 +70,19 @@ export default function RelatoriosPage() {
   });
 
   const relQ = useQuery<RelatorioResp | null>({
-    queryKey: ["rel-qtd-aulas-prof", professorId, periodo, dataInicio, dataFim],
+    queryKey: ["rel-qtd-aulas-prof", professorId, periodo, mesSelecionado, dataInicio, dataFim],
     queryFn: async () => {
       if (!professorId) return null;
       const qs = new URLSearchParams({ professor_id: professorId, periodo });
-      if (periodo === "custom") {
+      if (periodo === "mes") {
+        const anoAtual = new Date().getFullYear();
+        const inicio = `${anoAtual}-${mesSelecionado}-01`;
+        const ultimoDia = new Date(anoAtual, Number(mesSelecionado), 0).getDate();
+        const fim = `${anoAtual}-${mesSelecionado}-${String(ultimoDia).padStart(2, "0")}`;
+        qs.set("periodo", "custom");
+        qs.set("data_inicio", inicio);
+        qs.set("data_fim", fim);
+      } else if (periodo === "custom") {
         qs.set("data_inicio", dataInicio);
         qs.set("data_fim", dataFim);
       }
@@ -75,24 +99,69 @@ export default function RelatoriosPage() {
   const linhas = useMemo(() => relQ.data?.aulas || [], [relQ.data]);
 
   function exportarExcel() {
-    const header = ["Data", "Hora", "Aluno", "Status", "Valor por aula"];
-    const body = linhas.map((a) =>
-      [a.data_br, a.hora_br, a.aluno_nome, a.status, String(a.valor_por_aula || 0)]
-        .map((v) => `"${String(v).replace(/"/g, '""')}"`)
-        .join(",")
-    );
-    const csv = [header.join(","), ...body].join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `quantidade_aulas_professor_${isoToday()}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
+    exportReportExcel({
+      fileBaseName: "relatorio_quantidade_aulas_professor",
+      title: "Relatorio - Quantidade Aula Professor",
+      subtitle: `Gerado em ${new Date().toLocaleString("pt-BR")}`,
+      filters: [
+        `Professor: ${relQ.data?.professor_nome || "Nao selecionado"}`,
+        `Periodo: ${periodo === "mes" ? "mes" : periodo}`,
+        periodo === "mes" ? `Mes: ${mesesAno.find((m) => m.value === mesSelecionado)?.label || mesSelecionado}` : "",
+        periodo === "custom" ? `${dataInicio} ate ${dataFim}` : "",
+      ].filter(Boolean),
+      summary: [
+        { label: "Qtd aulas", value: String(relQ.data?.quantidade_aulas || 0) },
+        { label: "Valor por aula", value: toBRL(relQ.data?.valor_por_aula || 0) },
+        { label: "Total estimado", value: toBRL(relQ.data?.total_estimado || 0) },
+      ],
+      columns: [
+        { header: "Data", key: "data_br" },
+        { header: "Hora", key: "hora_br" },
+        { header: "Aluno", key: "aluno_nome" },
+        { header: "Status", key: "status" },
+        { header: "Valor por aula", key: "valor_por_aula" },
+      ],
+      rows: linhas.map((a) => ({
+        data_br: a.data_br,
+        hora_br: a.hora_br,
+        aluno_nome: a.aluno_nome,
+        status: a.status,
+        valor_por_aula: toBRL(a.valor_por_aula || 0),
+      })),
+    });
   }
 
   function exportarPDF() {
-    window.print();
+    exportReportPdf({
+      fileBaseName: "relatorio_quantidade_aulas_professor",
+      title: "Relatorio - Quantidade Aula Professor",
+      subtitle: `Gerado em ${new Date().toLocaleString("pt-BR")}`,
+      filters: [
+        `Professor: ${relQ.data?.professor_nome || "Nao selecionado"}`,
+        `Periodo: ${periodo === "mes" ? "mes" : periodo}`,
+        periodo === "mes" ? `Mes: ${mesesAno.find((m) => m.value === mesSelecionado)?.label || mesSelecionado}` : "",
+        periodo === "custom" ? `${dataInicio} ate ${dataFim}` : "",
+      ].filter(Boolean),
+      summary: [
+        { label: "Qtd aulas", value: String(relQ.data?.quantidade_aulas || 0) },
+        { label: "Valor por aula", value: toBRL(relQ.data?.valor_por_aula || 0) },
+        { label: "Total estimado", value: toBRL(relQ.data?.total_estimado || 0) },
+      ],
+      columns: [
+        { header: "Data", key: "data_br" },
+        { header: "Hora", key: "hora_br" },
+        { header: "Aluno", key: "aluno_nome" },
+        { header: "Status", key: "status" },
+        { header: "Valor por aula", key: "valor_por_aula" },
+      ],
+      rows: linhas.map((a) => ({
+        data_br: a.data_br,
+        hora_br: a.hora_br,
+        aluno_nome: a.aluno_nome,
+        status: a.status,
+        valor_por_aula: toBRL(a.valor_por_aula || 0),
+      })),
+    });
   }
 
   return (
@@ -113,6 +182,13 @@ export default function RelatoriosPage() {
             <button onClick={exportarPDF} className="rounded-xl border border-border px-3 py-2 text-sm text-text">PDF</button>
           </div>
         </div>
+        {periodo === "mes" && (
+          <div className="grid gap-3 sm:grid-cols-2">
+            <select value={mesSelecionado} onChange={(e) => setMesSelecionado(e.target.value)} className="h-12 rounded-2xl border border-border bg-white px-4 text-text outline-none">
+              {mesesAno.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+            </select>
+          </div>
+        )}
         {periodo === "custom" && (
           <div className="grid gap-3 sm:grid-cols-2">
             <Input type="date" value={dataInicio} onChange={(e) => setDataInicio(e.target.value)} />
