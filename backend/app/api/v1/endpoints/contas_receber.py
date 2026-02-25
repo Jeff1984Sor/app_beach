@@ -91,7 +91,16 @@ async def listar_contas_receber(
                   cr.data_pagamento,
                   COALESCE(cr.categoria, '') AS categoria,
                   COALESCE(cr.subcategoria, '') AS subcategoria,
-                  COALESCE(cr.descricao, '') AS descricao
+                  COALESCE(cr.descricao, '') AS descricao,
+                  CASE
+                    WHEN cr.aluno_id IS NULL THEN NULL
+                    ELSE (
+                      SELECT COUNT(1)
+                      FROM aulas a2
+                      WHERE a2.aluno_id = cr.aluno_id
+                        AND LOWER(COALESCE(a2.status, 'agendada')) <> 'realizada'
+                    )
+                  END AS aulas_pendentes
                 FROM contas_receber cr
                 LEFT JOIN alunos a ON a.id = cr.aluno_id
                 LEFT JOIN usuarios u ON u.id = a.usuario_id
@@ -119,6 +128,7 @@ async def listar_contas_receber(
             "categoria": r[9],
             "subcategoria": r[10],
             "descricao": r[11],
+            "aulas_pendentes": (int(r[12]) if r[12] is not None else None),
         }
         for r in rows
     ]

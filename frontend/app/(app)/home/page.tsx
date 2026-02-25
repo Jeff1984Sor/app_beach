@@ -29,6 +29,7 @@ type ContaReceber = {
   valor: number;
   vencimento: string;
   status: string;
+  aulas_pendentes?: number | null;
 };
 
 type ContaReceberAgg = {
@@ -36,6 +37,7 @@ type ContaReceberAgg = {
   aluno_nome: string;
   total: number;
   qtd: number;
+  qtd_pendencias_aulas?: number | null;
   proximo_vencimento: string;
   proxima_conta: ContaReceber;
 };
@@ -222,6 +224,7 @@ export default function HomePage() {
           aluno_nome: c.aluno_nome,
           total: Number(c.valor || 0),
           qtd: 1,
+          qtd_pendencias_aulas: c.aulas_pendentes ?? null,
           proximo_vencimento: c.vencimento,
           proxima_conta: c,
         });
@@ -229,6 +232,9 @@ export default function HomePage() {
       }
       existing.total += Number(c.valor || 0);
       existing.qtd += 1;
+      if (existing.qtd_pendencias_aulas == null && c.aulas_pendentes != null) {
+        existing.qtd_pendencias_aulas = c.aulas_pendentes;
+      }
 
       if (brDateToEpoch(c.vencimento) && brDateToEpoch(c.vencimento) < brDateToEpoch(existing.proximo_vencimento)) {
         existing.proximo_vencimento = c.vencimento;
@@ -399,7 +405,7 @@ export default function HomePage() {
                         <div className="min-w-0">
                           <p className="truncate font-semibold text-text">{c.aluno_nome}</p>
                           <p className="truncate text-sm text-muted">
-                            {c.qtd} em aberto • Próx: {c.proximo_vencimento}
+                            {(c.qtd_pendencias_aulas ?? c.qtd)} em aberto • Próx: {c.proximo_vencimento}
                           </p>
                         </div>
                         <div className="shrink-0 text-right">

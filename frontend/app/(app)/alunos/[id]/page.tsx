@@ -111,7 +111,7 @@ export default function AlunoFichaPage() {
   const [aulasSelecionadas, setAulasSelecionadas] = useState<number[]>([]);
   const [aulasFiltroStatus, setAulasFiltroStatus] = useState<
     "todas_exceto_realizada" | "todas" | "agendada" | "realizada" | "falta" | "falta_aviso" | "cancelada"
-  >("todas_exceto_realizada");
+  >("todas");
   const [financeiroFiltro, setFinanceiroFiltro] = useState<"aberto" | "pago">("aberto");
   const [openPagar, setOpenPagar] = useState(false);
   const [contaSelecionadaPagar, setContaSelecionadaPagar] = useState<number | null>(null);
@@ -605,9 +605,7 @@ export default function AlunoFichaPage() {
   }
 
   function selecionarTodasAulas() {
-    const selecionaveis = aulasFiltradas
-      .filter((a: any) => String(a.status || "").toLowerCase() !== "realizada")
-      .map((a: any) => a.id as number);
+    const selecionaveis = aulasFiltradas.map((a: any) => a.id as number);
     if (aulasSelecionadas.length === selecionaveis.length) {
       setAulasSelecionadas([]);
       return;
@@ -830,7 +828,6 @@ export default function AlunoFichaPage() {
                           type="checkbox"
                           className="h-4 w-4 accent-[#0A84FF]"
                           checked={aulasSelecionadas.includes(a.id)}
-                          disabled={String(a.status || "").toLowerCase() === "realizada"}
                           onChange={() => toggleAulaSelecionada(a.id)}
                         />
                         <div>
