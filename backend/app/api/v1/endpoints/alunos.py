@@ -540,7 +540,6 @@ async def ficha_aluno(aluno_id: int, db: AsyncSession = Depends(get_db)):
                 LEFT JOIN usuarios u ON u.id = p.usuario_id
                 WHERE a.aluno_id = :aluno_id
                 ORDER BY a.inicio ASC
-                LIMIT 50
                 """
             ),
             {"aluno_id": aluno_id},
