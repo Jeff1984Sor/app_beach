@@ -246,11 +246,21 @@ export default function AlunoFichaPage() {
   }, [planos, planoNome]);
 
   const resumoFinanceiro = useMemo(() => {
-    if (!data) return { aberto: "R$ 0", pago: "R$ 0", proximo: "--" };
-    const aberto = data.financeiro.filter((x: any) => x.status === "aberto").reduce((a: number, b: any) => a + Number(b.valor), 0);
-    const pago = data.financeiro.filter((x: any) => x.status === "pago").reduce((a: number, b: any) => a + Number(b.valor), 0);
-    const prox = data.financeiro.find((x: any) => x.status === "aberto")?.vencimento || "--";
-    return { aberto: `R$ ${aberto.toFixed(2)}`, pago: `R$ ${pago.toFixed(2)}`, proximo: prox };
+    if (!data) return { aberto: "R$ 0", pago: "R$ 0", proximo: "--", qtdAberto: 0, qtdPago: 0 };
+    const abertoLista = data.financeiro.filter((x: any) => String(x.status || "").toLowerCase() === "aberto");
+    const pagoLista = data.financeiro.filter((x: any) => String(x.status || "").toLowerCase() === "pago");
+    const abertoCalc = abertoLista.reduce((a: number, b: any) => a + Number(b.valor), 0);
+    const pagoCalc = pagoLista.reduce((a: number, b: any) => a + Number(b.valor), 0);
+    const totalAbertoApi = Number(data?.financeiro_stats?.total_aberto);
+    const totalPagoApi = Number(data?.financeiro_stats?.total_pago);
+    const qtdAbertoApi = Number(data?.financeiro_stats?.qtd_aberto);
+    const qtdPagoApi = Number(data?.financeiro_stats?.qtd_pago);
+    const aberto = Number.isFinite(totalAbertoApi) ? totalAbertoApi : abertoCalc;
+    const pago = Number.isFinite(totalPagoApi) ? totalPagoApi : pagoCalc;
+    const qtdAberto = Number.isFinite(qtdAbertoApi) ? qtdAbertoApi : abertoLista.length;
+    const qtdPago = Number.isFinite(qtdPagoApi) ? qtdPagoApi : pagoLista.length;
+    const prox = data.financeiro.find((x: any) => String(x.status || "").toLowerCase() === "aberto")?.vencimento || "--";
+    return { aberto: `R$ ${aberto.toFixed(2)}`, pago: `R$ ${pago.toFixed(2)}`, proximo: prox, qtdAberto, qtdPago };
   }, [data]);
   const financeiroFiltrado = useMemo(
     () => (data?.financeiro || []).filter((x: any) => (financeiroFiltro ? String(x.status || "").toLowerCase() === financeiroFiltro : true)),
@@ -894,13 +904,13 @@ export default function AlunoFichaPage() {
           {tab === "Financeiro" && (
             <Section title="Financeiro">
               <div className="grid gap-3 sm:grid-cols-3">
-                <Card><p className="text-sm text-muted">Total em aberto</p><p className="text-2xl font-semibold">{resumoFinanceiro.aberto}</p></Card>
-                <Card><p className="text-sm text-muted">Total pago</p><p className="text-2xl font-semibold">{resumoFinanceiro.pago}</p></Card>
+                <Card><p className="text-sm text-muted">Total em aberto (Quantidade: {resumoFinanceiro.qtdAberto})</p><p className="text-2xl font-semibold">{resumoFinanceiro.aberto}</p></Card>
+                <Card><p className="text-sm text-muted">Total pago (Quantidade: {resumoFinanceiro.qtdPago})</p><p className="text-2xl font-semibold">{resumoFinanceiro.pago}</p></Card>
                 <Card><p className="text-sm text-muted">Proximo vencimento</p><p className="text-2xl font-semibold">{resumoFinanceiro.proximo}</p></Card>
               </div>
               <div className="mt-4 flex gap-2">
-                <button onClick={() => setFinanceiroFiltro("aberto")} className={`rounded-xl px-3 py-2 text-sm ${financeiroFiltro === "aberto" ? "bg-primary text-white" : "border border-border bg-white text-text"}`}>Em aberto</button>
-                <button onClick={() => setFinanceiroFiltro("pago")} className={`rounded-xl px-3 py-2 text-sm ${financeiroFiltro === "pago" ? "bg-primary text-white" : "border border-border bg-white text-text"}`}>Pagas</button>
+                <button onClick={() => setFinanceiroFiltro("aberto")} className={`rounded-xl px-3 py-2 text-sm ${financeiroFiltro === "aberto" ? "bg-primary text-white" : "border border-border bg-white text-text"}`}>Em aberto ({resumoFinanceiro.qtdAberto})</button>
+                <button onClick={() => setFinanceiroFiltro("pago")} className={`rounded-xl px-3 py-2 text-sm ${financeiroFiltro === "pago" ? "bg-primary text-white" : "border border-border bg-white text-text"}`}>Pagas ({resumoFinanceiro.qtdPago})</button>
               </div>
               <div className="mt-3 space-y-3">
                 {financeiroFiltrado.map((f: any) => (

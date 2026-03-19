@@ -170,6 +170,12 @@ async def ensure_finance_columns(db: AsyncSession):
               END IF;
               IF NOT EXISTS (
                 SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'contas_receber' AND column_name = 'aula_id'
+              ) THEN
+                ALTER TABLE contas_receber ADD COLUMN aula_id INTEGER;
+              END IF;
+              IF NOT EXISTS (
+                SELECT 1 FROM information_schema.columns
                 WHERE table_name = 'movimentos_bancarios' AND column_name = 'categoria'
               ) THEN
                 ALTER TABLE movimentos_bancarios ADD COLUMN categoria VARCHAR(120);
@@ -546,6 +552,22 @@ async def ficha_aluno(aluno_id: int, db: AsyncSession = Depends(get_db)):
         )
     ).all()
     financeiro = (await db.execute(select(ContaReceber).where(ContaReceber.aluno_id == aluno_id).order_by(ContaReceber.vencimento.desc()).limit(20))).scalars().all()
+    financeiro_stats_row = (
+        await db.execute(
+            text(
+                """
+                SELECT
+                  COUNT(1) FILTER (WHERE LOWER(COALESCE(status, 'aberto')) = 'aberto') AS qtd_aberto,
+                  COUNT(1) FILTER (WHERE LOWER(COALESCE(status, 'aberto')) = 'pago') AS qtd_pago,
+                  COALESCE(SUM(CASE WHEN LOWER(COALESCE(status, 'aberto')) = 'aberto' THEN valor ELSE 0 END), 0) AS total_aberto,
+                  COALESCE(SUM(CASE WHEN LOWER(COALESCE(status, 'aberto')) = 'pago' THEN valor ELSE 0 END), 0) AS total_pago
+                FROM contas_receber
+                WHERE aluno_id = :aluno_id
+                """
+            ),
+            {"aluno_id": aluno_id},
+        )
+    ).first()
     contratos_rows = (
         await db.execute(
             text(
@@ -600,6 +622,12 @@ async def ficha_aluno(aluno_id: int, db: AsyncSession = Depends(get_db)):
             }
             for f in financeiro
         ],
+        "financeiro_stats": {
+            "qtd_aberto": int(financeiro_stats_row[0] or 0) if financeiro_stats_row else 0,
+            "qtd_pago": int(financeiro_stats_row[1] or 0) if financeiro_stats_row else 0,
+            "total_aberto": float(financeiro_stats_row[2] or 0) if financeiro_stats_row else 0.0,
+            "total_pago": float(financeiro_stats_row[3] or 0) if financeiro_stats_row else 0.0,
+        },
         "contratos": [
             {
                 "id": c[0],
@@ -1097,8 +1125,30 @@ async def criar_aula_avulsa(aluno_id: int, payload: dict, db: AsyncSession = Dep
         observacao=observacao,
     )
     db.add(aula)
+    await db.flush()
     if valor > 0:
-        db.add(ContaReceber(contrato_id=None, aluno_id=aluno_id, vencimento=data_ref, valor=valor, status="aberto"))
+        categoria = (payload.get("categoria") or "").strip() or "Mensalidade"
+        subcategoria = (payload.get("subcategoria") or "").strip() or "Aula Avulsa"
+        descricao = observacao or f"Aula avulsa {data_ref.strftime('%d/%m/%Y')} {hora_txt}"
+        await db.execute(
+            text(
+                """
+                INSERT INTO contas_receber
+                  (contrato_id, aluno_id, aula_id, vencimento, valor, status, descricao, categoria, subcategoria, created_at, updated_at)
+                VALUES
+                  (NULL, :aluno_id, :aula_id, :vencimento, :valor, 'aberto', :descricao, :categoria, :subcategoria, NOW(), NOW())
+                """
+            ),
+            {
+                "aluno_id": aluno_id,
+                "aula_id": int(aula.id),
+                "vencimento": data_ref,
+                "valor": valor,
+                "descricao": descricao,
+                "categoria": categoria,
+                "subcategoria": subcategoria,
+            },
+        )
     await db.commit()
     await db.refresh(aula)
     return {"ok": True, "aula_id": aula.id}
@@ -1165,14 +1215,54 @@ async def reagendar_aula(aluno_id: int, aula_id: int, payload: dict, db: AsyncSe
 
 @router.delete("/{aluno_id}/aulas/{aula_id}")
 async def deletar_aula_aluno(aluno_id: int, aula_id: int, db: AsyncSession = Depends(get_db)):
+    await ensure_finance_columns(db)
     aula = await db.scalar(select(Aula).where(Aula.id == aula_id, Aula.aluno_id == aluno_id))
     if not aula:
         raise HTTPException(status_code=404, detail="Aula nao encontrada")
     if (aula.status or "").lower() == "realizada":
         raise HTTPException(status_code=400, detail="Aula realizada nao pode ser deletada")
+
+    fin_del = await db.execute(
+        text("DELETE FROM contas_receber WHERE aluno_id = :aluno_id AND aula_id = :aula_id"),
+        {"aluno_id": aluno_id, "aula_id": aula_id},
+    )
+    financeiro_removido = int(getattr(fin_del, "rowcount", 0) or 0)
+
+    # Compatibilidade com lancamentos antigos (antes da coluna aula_id):
+    # remove 1 conta avulsa em aberto que bata por aluno/data/valor.
+    if financeiro_removido == 0 and aula.contrato_id is None and float(aula.valor or 0) > 0:
+        inicio = aula.inicio
+        inicio_br = (
+            inicio.astimezone(BR_TZ)
+            if getattr(inicio, "tzinfo", None)
+            else inicio.replace(tzinfo=timezone.utc).astimezone(BR_TZ)
+        )
+        venc = inicio_br.date()
+        legacy_del = await db.execute(
+            text(
+                """
+                DELETE FROM contas_receber
+                WHERE id = (
+                  SELECT id
+                  FROM contas_receber
+                  WHERE aluno_id = :aluno_id
+                    AND aula_id IS NULL
+                    AND contrato_id IS NULL
+                    AND LOWER(COALESCE(status, 'aberto')) = 'aberto'
+                    AND vencimento = :vencimento
+                    AND ABS(COALESCE(valor, 0) - :valor) < 0.01
+                  ORDER BY id DESC
+                  LIMIT 1
+                )
+                """
+            ),
+            {"aluno_id": aluno_id, "vencimento": venc, "valor": float(aula.valor or 0)},
+        )
+        financeiro_removido += int(getattr(legacy_del, "rowcount", 0) or 0)
+
     await db.delete(aula)
     await db.commit()
-    return {"ok": True}
+    return {"ok": True, "financeiro_removido": financeiro_removido}
 
 
 @router.post("/{aluno_id}/aulas/{aula_id}/descontar")
