@@ -543,6 +543,9 @@ export default function HomePage() {
                 <Link href="/alunos/novo" className="inline-flex h-11 items-center rounded-2xl bg-primary px-5 text-sm font-semibold text-white shadow-soft">
                   + Aluno
                 </Link>
+                <Link href="/aulas-avulsas" className="inline-flex h-11 items-center rounded-2xl border border-border bg-white px-5 text-sm font-semibold text-text">
+                  + Aula avulsa
+                </Link>
                 <Link href="/configuracoes?entidade=planos" className="inline-flex h-11 items-center rounded-2xl border border-border bg-white px-5 text-sm font-semibold text-text">
                   + Plano
                 </Link>
@@ -556,6 +559,9 @@ export default function HomePage() {
         <div className="flex flex-wrap items-center gap-2">
           <Link href="/alunos" className="inline-flex h-11 items-center rounded-2xl bg-primary px-5 text-sm font-semibold text-white shadow-soft">
             Ver alunos
+          </Link>
+          <Link href="/aulas-avulsas" className="inline-flex h-11 items-center rounded-2xl border border-border bg-white px-5 text-sm font-semibold text-text">
+            Aula avulsa
           </Link>
         </div>
       )}
