@@ -1,0 +1,17 @@
+# Frontend Next.js - copie para /etc/systemd/system/app-beach-frontend.service
+[Unit]
+Description=App Beach Frontend (Next.js)
+After=network.target app-beach-backend.service
+
+[Service]
+Type=simple
+User=appbeach
+WorkingDirectory=/opt/app_beach/frontend
+Environment="NODE_ENV=production"
+Environment="PORT=3000"
+ExecStart=/usr/bin/npm run start
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

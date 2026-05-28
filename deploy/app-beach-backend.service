@@ -1,0 +1,17 @@
+# Backend FastAPI (uvicorn) - copie para /etc/systemd/system/app-beach-backend.service
+[Unit]
+Description=App Beach Backend (FastAPI)
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=appbeach
+WorkingDirectory=/opt/app_beach/backend
+Environment="PATH=/opt/app_beach/backend/.venv/bin"
+EnvironmentFile=/opt/app_beach/backend/.env
+ExecStart=/opt/app_beach/backend/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8010
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
